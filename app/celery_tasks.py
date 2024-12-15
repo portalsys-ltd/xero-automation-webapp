@@ -1672,6 +1672,7 @@ def check_if_credit_memo(pdf_path):
 
 
 
+
 @celery.task(bind=True)
 def process_cocacola_task(self, user_id):
     # Fetch the user by user_id
@@ -1684,7 +1685,7 @@ def process_cocacola_task(self, user_id):
     tenant_names = [tenant.tenant_name for tenant in tenants]
 
     # Fetch Coca-Cola invoices without tracking categories for these tenants
-    cocacola_invoices= get_invoices_and_credit_notes(user, tenant_names, "COCACOLA")
+    cocacola_invoices= get_invoices_and_credit_notes(user, tenant_names, "CocaCola")
 
     # Calculate total invoices to process
     total_invoices = len(cocacola_invoices)
@@ -1695,6 +1696,9 @@ def process_cocacola_task(self, user_id):
 
     # Track errors
     errors = []
+
+    print(total_invoices)
+    
 
     # Process the invoices for each tenant
     for invoice in invoices_to_process:
@@ -1776,7 +1780,7 @@ def process_textman_task(self, user_id):
     tenant_names = [tenant.tenant_name for tenant in tenants]
 
     # Fetch Textman invoices without tracking categories for these tenants
-    textman_invoices = get_invoices_and_credit_notes(user, tenant_names, "TextMan")
+    textman_invoices = get_invoices_and_credit_notes(user, tenant_names, "Text Management")
 
 
     # Count total invoices

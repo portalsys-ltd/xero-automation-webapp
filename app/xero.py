@@ -176,8 +176,15 @@ def xero_login():
     state = "fixed_state_value"  # Set a fixed state value
     session['oauth_state'] = state  # Store fixed state in the session 
     api_client, xero_app = get_xero_client_for_user(user)
-    redirect_url = url_for("xero.oauth_callback", _external=True)
-    redirect_url = redirect_url.replace("127.0.0.1", "localhost")  # Ensure localhost is used
+
+    # Check the environment and set the redirect URL accordingly
+    if os.environ.get('FLASK_ENV') == 'production':
+        redirect_url = "https://xero-automation-webapp-dd8c38571179.herokuapp.com/xero_settings"
+    else:
+        redirect_url = url_for("xero.oauth_callback", _external=True)
+        redirect_url = redirect_url.replace("127.0.0.1", "localhost")  # Ensure localhost is used
+
+
     add_log(f"User {user.username} initiated Xero login", "general")  # Log the Xero login initiation
     return xero_app.authorize(callback_uri=redirect_url)
 
@@ -1707,11 +1714,10 @@ def get_invoices_and_credit_notes(user, tenants, contact_name):
 
     all_invoices_and_credit_notes = []
 
-    tenants = XeroTenant.query.filter_by(user_id=user.id).all()
 
     try:
         # Loop through each tenant connection
-        for connection in tenants:
+        for connection in identity_api.get_connections():
             if connection.tenant_name in tenants and connection.tenant_type == "ORGANISATION":
                 xero_tenant_id = connection.tenant_id
                 tenant_name = connection.tenant_name
