@@ -61,8 +61,8 @@ def create_app(config_name=None):
     celery = make_celery(app)
 
 
-    with app.app_context():
-            db.create_all()  # Ensure all models are created if not already
+    #with app.app_context():
+            #db.create_all()  # Ensure all models are created if not already
 
     # Import models after initializing db to avoid circular import issues
     from app.models import User
