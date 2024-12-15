@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if title %}{{ title }}{% else %}Xero Settings{% endif %}
+{% endblock %}
+
+{% block content %}
+<div style="display: flex; align-items: center; justify-content: space-between;">
+    <img src="https://upload.wikimedia.org/wikipedia/en/thumb/9/9f/Xero_software_logo.svg/2048px-Xero_software_logo.svg.png" alt="Xero Logo" style="height: 50px;">
+    <a href="{{ url_for('xero.xero_login') }}">
+        <button style="padding: 10px 20px; background-color: #0070C0; color: white; border: none; border-radius: 5px; cursor: pointer;">
+            Add Connection
+        </button>
+    </a>
+</div>
+
+<div>
+    {% if session.xero_logged_in %}
+        <p style="color: green;">Logged in</p>
+        
+        <h3>Token Information</h3>
+        <div style="background: #e8f4ff; padding: 15px; margin-bottom: 20px; border-radius: 8px;">
+            <p>
+                <strong><a href="#" onclick="openModal('accessTokenModal')">Access Token:</a></strong> 
+                {{ "Stored" if access_token_stored else "Not Stored" }}
+            </p>
+            <p>
+                <strong><a href="#" onclick="openModal('refreshTokenModal')">Refresh Token:</a></strong> 
+                {{ "Stored" if refresh_token_stored else "Not Stored" }}
+            </p>
+            <p><strong>Token Expiry:</strong> {{ token_expires_at if token_expires_at else "Not Available" }}</p>
+        </div>
+    {% endif %}
+    
+    <h3>Connected Tenants</h3>
+    <p><strong>Number of Connected Tenants:</strong> {{ tenants|length }}</p>
+    <ul style="list-style-type: none; padding: 0;">
+        {% for tenant in tenants %}
+            <li style="background: #f0f0f0; margin: 10px 0; padding: 15px; border-radius: 8px; display: flex; align-items: center; justify-content: space-between;">
+                <div>
+                    <strong>{{ tenant.tenant_name }}</strong> <br>
+                    <small style="color: gray;">Type: {{ tenant.tenant_type }}</small>
+                </div>
+            </li>
+        {% endfor %}
+    </ul>
+</div>
+
+<!-- Access Token Modal -->
+<div id="accessTokenModal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5);">
+    <div style="background: white; margin: 10% auto; padding: 20px; width: 50%; max-width: 800px; height: 400px; border-radius: 8px; overflow-y: auto;">
+        <h3>Access Token</h3>
+        <p style="word-wrap: break-word; white-space: pre-wrap;">{{ access_token }}</p>
+        <button onclick="closeModal('accessTokenModal')" style="padding: 10px 20px; background-color: #0070C0; color: white; border: none; border-radius: 5px; cursor: pointer;">Close</button>
+    </div>
+</div>
+
+<!-- Refresh Token Modal -->
+<div id="refreshTokenModal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5);">
+    <div style="background: white; margin: 10% auto; padding: 20px; width: 50%; max-width: 800px; height: 400px; border-radius: 8px; overflow-y: auto;">
+        <h3>Refresh Token</h3>
+        <p style="word-wrap: break-word; white-space: pre-wrap;">{{ refresh_token }}</p>
+        <button onclick="closeModal('refreshTokenModal')" style="padding: 10px 20px; background-color: #0070C0; color: white; border: none; border-radius: 5px; cursor: pointer;">Close</button>
+    </div>
+</div>
+
+<script>
+function openModal(modalId) {
+    document.getElementById(modalId).style.display = 'block';
+}
+
+function closeModal(modalId) {
+    document.getElementById(modalId).style.display = 'none';
+}
+</script>
+{% endblock %}

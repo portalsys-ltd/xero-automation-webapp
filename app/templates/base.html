@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>{% block title %}Flask App{% endblock %}</title>
+    <!-- Google Fonts: Roboto -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Bootstrap CSS -->
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome for Icons -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" rel="stylesheet">
+    <style>
+        /* Global Styling */
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* Sidebar Styling */
+        .sidebar {
+            height: 100vh;
+            width: 200px;
+            position: fixed;
+            top: 0;
+            left: 0;
+            background-color: rgba(34, 34, 34, 0.9); /* Glassmorphism */
+            backdrop-filter: blur(10px);
+            padding-top: 20px;
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .sidebar a {
+            padding: 15px 20px;
+            color: #aaa;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+
+        .sidebar a i, .sidebar a img {
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+
+        .sidebar a:hover {
+            color: #fff;
+        }
+
+        .card {
+            background-color: #fff;
+            border: none; /* Removing borders for a cleaner look */
+            border-radius: 8px; /* Rounded corners for a modern look */
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Softer shadow for depth */
+            padding: 20px;
+            margin-bottom: 30px; /* Increasing bottom margin for better spacing */
+            transition: box-shadow 0.3s ease-in-out; /* Smooth transition for hover effects */
+        }
+
+        .card:hover {
+            box-shadow: 0 8px 12px rgba(0, 0, 0, 0.2); /* Dynamic shadow on hover */
+        }
+
+        .card-header {
+            background-color: #fff; /* Unified color with the card body */
+            border-bottom: 2px solid #eee; /* Subtle bottom border */
+            padding: 15px 25px;
+            font-size: 18px; /* Larger font for prominence */
+            color: #333;
+            font-weight: 500; /* Medium font weight */
+        }
+
+        .card-body {
+            padding: 20px;
+            color: #666; /* Lighter text color for readability */
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; /* Modern, sans-serif font */
+        }
+
+        .card-title {
+            font-size: 20px; /* Stand-out size for titles */
+            margin-bottom: 15px; /* Space below titles */
+        }
+
+        .card-text {
+            line-height: 1.5; /* Improved line spacing for readability */
+            margin-bottom: 20px; /* Space below text */
+        }
+
+
+        /* Toggle switch container */
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 15px 20px;
+            color: #aaa;
+        }
+
+        /* Toggle switch */
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 20px;
+        }
+
+        .toggle-switch input {
+            display: none;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 20px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 14px;
+            width: 14px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .toggle-slider {
+            background-color: #28a745;
+        }
+
+        input:checked + .toggle-slider:before {
+            transform: translateX(20px);
+        }
+
+        /* Position the logout link at the bottom-left */
+        .logout-link {
+            position: absolute;
+            bottom: 20px;
+            left: 0;
+            width: 100%;
+            padding-left: 20px;
+            color: #aaa;
+            display: flex;
+            align-items: center;
+            font-weight: 500;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .logout-link i {
+            margin-right: 10px;
+        }
+
+        /* Change text and style when hovered */
+        .logout-link:hover {
+            color: #fff;
+            background-color: #dc3545;
+        }
+
+        /* Main content container */
+        .content-wrapper {
+            margin-left: 200px; /* Adjust for the sidebar */
+            flex-grow: 1; /* Ensure it takes the full height */
+            padding: 20px;
+            overflow-y: auto; /* Allow the content to scroll */
+        }
+
+        /* Content Area */
+        .content {
+            padding: 30px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            min-height: 200px;
+        }
+
+        /* Log container fixed to the bottom of the page */
+        .log-container {
+            position: fixed;
+            bottom: 0;
+            left: 200px; /* Account for the sidebar width */
+            width: calc(100% - 200px); /* Full width minus the sidebar width */
+            background-color: #f8f9fa;
+            border-top: 1px solid #dee2e6;
+            padding: 10px;
+            box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.1); /* Shadow on top */
+        }
+
+        /* Log controls container */
+        .log-controls-container {
+            display: flex;
+            justify-content: flex-start;
+            gap: 20px;
+            background-color: #e9ecef;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        /* Styling for radio buttons */
+        .log-radio-label {
+            display: flex;
+            align-items: center;
+            font-weight: 500;
+            color: #333;
+        }
+
+        .log-radio-label input {
+            margin-right: 5px;
+        }
+
+        /* Styling for log sections */
+        .log-section {
+            max-height: 150px;
+            overflow-y: auto;
+            background-color: #fff;
+            padding: 10px;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+        }
+
+        /* Error log section styling */
+        #error-log-section h6 {
+            color: red;
+        }
+        
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 100%;
+                height: auto;
+                position: relative;
+            }
+            .content-wrapper {
+                margin-left: 0;
+                width: 100%;
+            }
+            .log-container {
+                left: 0;
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar -->
+    <div class="sidebar">
+
+        <a href="{{ url_for('main.home') }}">
+            <i class="fas fa-home"></i> Home
+        </a>
+        <a href="{{ url_for('main.settings') }}">
+            <i class="fas fa-cog"></i> Settings
+        </a>
+        <a href="{{ url_for('recharging.recharging_home') }}">
+            <i class="fas fa-play"></i> Recharging
+        </a>
+        <!-- Use Xero Logo from URL -->
+        <a href="{{ url_for('main.xero_settings') }}">
+            <img src="https://upload.wikimedia.org/wikipedia/en/thumb/9/9f/Xero_software_logo.svg/2048px-Xero_software_logo.svg.png" alt="Xero Logo" style="width: 20px; height: 20px; margin-right: 10px;">
+            Xero Settings
+        </a>
+        <a href="{{ url_for('main.auto_workflows') }}">
+            <i class="fas fa-sync-alt"></i> Auto Workflows
+        </a>
+
+        <!-- Logs Toggle Switch above logout -->
+        <div class="toggle-container">
+            <span><i class="fas fa-file-alt"></i> Show Logs</span>
+            <label class="toggle-switch">
+                <input type="checkbox" id="toggle-log-switch">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+        
+
+        <!-- Logout Link Positioned at the Bottom -->
+        <a href="{{ url_for('auth.user_logout') }}" class="logout-link">
+            <i class="fas fa-sign-out-alt"></i> <span>Logout</span>
+        </a>
+    </div>
+
+    <!-- Content Wrapper -->
+    <div class="content-wrapper">
+        <!-- Main Content -->
+        <div class="content">
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+
+    <!-- Log Section (fixed at the bottom) -->
+    <div id="log-container" class="log-container" style="display: none;">
+        <!-- Log controls container -->
+        <div class="log-controls-container">
+            <label class="log-radio-label">
+                <input type="radio" name="log-filter" value="general" id="show-general-radio" checked> General Logs
+            </label>
+            <label class="log-radio-label">
+                <input type="radio" name="log-filter" value="error" id="show-error-radio"> Error Logs
+            </label>
+            <label class="log-radio-label">
+                <input type="radio" name="log-filter" value="both" id="show-both-radio"> Both
+            </label>
+        </div>
+
+        <!-- General Logs Section -->
+        <div id="general-log-section" class="log-section">
+            <h6>General Logs</h6>
+        </div>
+
+        <!-- Error Logs Section -->
+        <div id="error-log-section" class="log-section">
+            <h6 style="color:red;">Error Logs</h6>
+        </div>
+    </div>
+
+    <!-- JavaScript Libraries -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.2/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" rel="stylesheet"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+
+
+    <!-- DataTables CSS -->
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.11.5/css/jquery.dataTables.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.0.0/css/buttons.dataTables.min.css">
+
+    <!-- DataTables JS -->
+    <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.js"></script>
+
+    <!-- DataTables Buttons Extension -->
+    <script src="https://cdn.datatables.net/buttons/2.0.0/js/dataTables.buttons.min.js"></script>
+
+    <!-- Buttons for HTML5 export -->
+    <script src="https://cdn.datatables.net/buttons/2.0.0/js/buttons.html5.min.js"></script>
+
+    <!-- Toggle Log Script -->
+    <script>
+        $(document).ready(function() {
+            // Toggle the entire log section when toggling the switch
+            $('#toggle-log-switch').change(function() {
+                $('#log-container').toggle(this.checked);
+                toggleLogSections()
+            });
+
+            // Event handler for radio buttons
+            $('input[name="log-filter"]').change(function() {
+                toggleLogSections();
+            });
+
+            // Function to toggle the log sections based on selected radio button
+            function toggleLogSections() {
+                var selectedValue = $('input[name="log-filter"]:checked').val();
+                
+                if (selectedValue === "general") {
+                    $('#general-log-section').show();
+                    $('#error-log-section').hide();
+                } else if (selectedValue === "error") {
+                    $('#general-log-section').hide();
+                    $('#error-log-section').show();
+                } else {
+                    $('#general-log-section').show();
+                    $('#error-log-section').show();
+                }
+            }
+
+            // Fetch logs from the server and update the log sections
+            function fetchLogs() {
+                $.get('/logs/get_logs', function(data) {
+                    $('#general-log-section').html('<h6>General Logs</h6>');
+                    $('#error-log-section').html('<h6 style="color:red;">Error Logs</h6>');
+
+                    // Append general logs
+                    data.general.forEach(function(log) {
+                        $('#general-log-section').append('<p>' + log.message + ' <span style="float:right; color:gray;">' + timeAgo(new Date(log.timestamp)) + '</span></p>');
+                    });
+
+                    // Append error logs
+                    data.errors.forEach(function(log) {
+                        $('#error-log-section').append('<p style="color:red;">' + log.message + ' <span style="float:right; color:gray;">' + timeAgo(new Date(log.timestamp)) + '</span></p>');
+                    });
+                });
+            }
+
+            // Helper function to show relative time (e.g., "5 minutes ago")
+            function timeAgo(date) {
+                const now = new Date();
+                const seconds = Math.floor((now - date) / 1000);
+                let interval = Math.floor(seconds / 31536000);
+
+                if (interval > 1) return interval + " years ago";
+                interval = Math.floor(seconds / 2592000);
+                if (interval > 1) return interval + " months ago";
+                interval = Math.floor(seconds / 86400);
+                if (interval > 1) return interval + " days ago";
+                interval = Math.floor(seconds / 3600);
+                if (interval > 1) return interval + " hours ago";
+                interval = Math.floor(seconds / 60);
+                if (interval > 1) return interval + " minutes ago";
+                return Math.floor(seconds) + " seconds ago";
+            }
+
+            // Fetch logs every few seconds
+            setInterval(fetchLogs, 3000);
+        });
+    </script>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

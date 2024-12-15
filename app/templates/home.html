@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}{{ username }}'s Home{% endblock %}
+
+{% block content %}
+    <div class="container text-center mt-5">
+        <div class="row">
+            <div class="col-md-12">
+                <!-- Domino's Logo -->
+                <img src="https://conceptstore.co.uk/wp-content/uploads/2015/04/dominos-logo4.jpg" alt="Domino's Logo" class="img-fluid mb-4" style="max-width: 200px;">
+    
+                <!-- Costa Coffee Logo -->
+                <img src="https://logos-world.net/wp-content/uploads/2022/03/Costa-Coffee-Emblem.png" alt="Costa Coffee Logo" class="img-fluid mb-4" style="max-width: 200px;">
+    
+                <!-- GDK Store Logo -->
+                <img src="https://sskserverv4.3s-pos.com/api/image/undefined/GDkLogoC996521" alt="GDK Store Logo" class="img-fluid mb-4" style="max-width: 200px;">
+    
+                <!-- Snap Fitness Logo -->
+                <img src="https://www.snapfitness.com/us/images/snap-fitness-logo.svg" alt="Snap Fitness Logo" class="img-fluid mb-4" style="max-width: 200px;">
+    
+                <!-- Welcome Message -->
+                <h1 class="display-4">Welcome, {{ username }}!</h1>
+            </div>
+        </div>
+
+        <div class="row mt-5">
+            <div class="col-md-3">
+                <div class="card shadow-sm p-3 mb-5 bg-white rounded">
+                    <img src="https://cdn-icons-png.flaticon.com/512/2921/2921222.png" class="card-img-top mx-auto d-block" alt="Invoice Automation" style="max-width: 100px;">
+                    <div class="card-body">
+                        <h5 class="card-title">Automate Invoice Processing</h5>
+                        <p class="card-text">Automatically handle your invoices with precision and speed.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card shadow-sm p-3 mb-5 bg-white rounded">
+                    <img src="https://upload.wikimedia.org/wikipedia/en/thumb/9/9f/Xero_software_logo.svg/2048px-Xero_software_logo.svg.png" class="card-img-top mx-auto d-block" alt="Xero API Connection" style="max-width: 100px;">
+                    <div class="card-body">
+                        <h5 class="card-title">Xero API Integration</h5>
+                        <p class="card-text">Seamlessly connect with Xero to manage your financial data.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card shadow-sm p-3 mb-5 bg-white rounded">
+                    <img src="https://cdn-icons-png.flaticon.com/512/1621/1621635.png" class="card-img-top mx-auto d-block" alt="Automatic Recharging" style="max-width: 100px;">
+                    <div class="card-body">
+                        <h5 class="card-title">Automatic Recharging</h5>
+                        <p class="card-text">Efficiently manage recharges with automated processes.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card shadow-sm p-3 mb-5 bg-white rounded">
+                    <img src="https://img.freepik.com/premium-vector/ai-logo-template-vector-with-white-background_1023984-15069.jpg" class="card-img-top mx-auto d-block" alt="AI-Powered Solutions" style="max-width: 100px;">
+                    <div class="card-body">
+                        <h5 class="card-title">AI-Powered Solutions</h5>
+                        <p class="card-text">Leverage AI to enhance your data processing workflows.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

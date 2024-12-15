@@ -1,0 +1,1856 @@
+{% extends "base.html" %}
+
+{% block title %}Settings{% endblock %}
+
+{% block content %}
+
+<style>
+    .scrollable-list {
+        max-height: 300px; /* Adjust the height as needed */
+        overflow-y: auto;
+    }
+
+    .clicked {
+        background-color: green;
+        color: white;
+        pointer-events: none; /* Disable further clicks */
+    }
+
+    .card .dataTables_wrapper {
+        width: 100%;      /* Ensures the DataTable fills the card */
+        margin: 0 auto;   /* Centers the table if there's any excess space */
+    }
+    .card .table {
+        width: 100% !important;  /* Ensures that the table element itself also expands to fill the card */
+    }
+    .card .dt-buttons {
+        margin-bottom: 20px;  /* Adds some spacing below the buttons for visual separation */
+    }
+
+
+
+</style>
+
+
+<div class="container mt-5">
+    <h1 class="mb-4">Settings</h1>
+
+    <!-- Navigation Tabs -->
+    <ul class="nav nav-tabs mt-4" id="settingsTabs" role="tablist">
+        <li class="nav-item">
+            <a class="nav-link active" id="tracking-codes-tab" data-toggle="tab" href="#tracking-codes" role="tab" aria-controls="tracking-codes" aria-selected="true">Tracking Codes</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="companies-tab" data-toggle="tab" href="#companies" role="tab" aria-controls="companies" aria-selected="false">Companies</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="account-codes-tab" data-toggle="tab" href="#account-codes" role="tab" aria-controls="account-codes" aria-selected="false">Account Codes</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="dom-invoice-settings-tab" data-toggle="tab" href="#dom-invoice-settings" role="tab" aria-controls="dom-invoice-settings" aria-selected="false">DOM Invoice Settings</a>
+        </li>
+        
+    </ul>
+
+    
+    
+
+    
+
+    <div class="tab-content mt-5" id="settingsTabContent">
+
+        <!-- DOM Invoice Settings Section -->
+        <div class="tab-pane fade" id="dom-invoice-settings" role="tabpanel" aria-labelledby="dom-invoice-settings-tab">
+
+            <div class="card mb-4">
+                <div class="card-body">
+                    <button id="syncWithXeroCodes" class="btn btn-warning mb-2">Sync Xero Tracking Categories</button>
+                    <button id="syncWithXeroStoreAccountCodes" class="btn btn-primary mb-2">Sync Xero Account Codes</button>
+                    <ul id="xero_sync_results_codes" class="list-group scrollable-list"></ul>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h2 class="h5">Make Dom Tenant LIVE</h2>
+                </div>
+                <div class="card-body">
+                    <form id="addTenantForm" class="form-inline">
+                        <div class="form-group mb-2 mr-2">
+                            <label for="tenant_name" class="mr-2">Select a domino's company tenant</label>
+                            <select id="tenant_name" name="tenant_name" class="form-control" required>
+                                <option value="" disabled selected>Select a tenant</option>
+                                {% for tenant in connected_tenants %}
+                                    <option value="{{ tenant }}">{{ tenant }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary mb-2">Add Tenant</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- List of Existing Tenants -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h2 class="h5">Live Dom Tenants</h2>
+                </div>
+                <div class="card-body">
+                    <ul id="dom_tenants_list" class="list-group scrollable-list">
+                        {% for tenant in dom_tenants %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                {{ tenant.tenant_name }}
+                                <button class="btn btn-danger btn-sm delete-tenant" data-id="{{ tenant.id }}">Delete</button>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Display Tracking Categories and Save Form -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h2 class="h5">Tracking Categories</h2>
+                </div>
+                <div class="card-body">
+                    <form id="trackingCategoriesForm">
+                        <div class="table-responsive">
+                            <table id="trackingCategoriesTable" class="table table-bordered">
+                                <thead>
+                                    <tr>
+                                        <th>Tenant Name</th>
+                                        <th>Tracking Category</th>
+                                        <th>Tracking Option</th>
+                                        <th>Store Number</th>
+                                        <th>Store Postcode</th>
+                                        <th>Store Contact Name</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="trackingCategoriesTableBody">
+                                    <!-- Tracking Categories will be loaded dynamically here -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Save</button>
+                    </form>
+                </div>
+            </div>
+            
+
+            <!-- Add New Store Account Code Form -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h2 class="h5">Add New Xero Account Code</h2>
+                </div>
+                <div class="card-body">
+                    <form id="addStoreAccountCodeForm" method="POST" action="/add_store_account_code">
+                        <div class="form-row mb-2">
+                            <div class="form-group col-md-3">
+                                <label for="account_code">Xero Account Code</label>
+                                <input type="text" class="form-control" id="account_code" name="account_code" placeholder="Enter Account Code" required>
+                            </div>
+                            <div class="form-group col-md-3">
+                                <label for="account_name">Account Name</label>
+                                <input type="text" class="form-control" id="account_name" name="account_name" placeholder="Enter Account Name" required>
+                            </div>
+                            <div class="form-group col-md-3">
+                                <label for="account_type">Account Type</label>
+                                <select id="account_type" name="account_type" class="form-control" required>
+                                    <option value="" disabled selected>Select Account Type</option>
+                                    {% for account_type in allowed_account_types %}
+                                        <option value="{{ account_type }}">{{ account_type }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-group col-md-3">
+                                <label for="tax_type">Tax Type</label>
+                                <select id="tax_type" name="tax_type" class="form-control" required>
+                                    <option value="" disabled selected>Select Tax Type</option>
+                                    {% for tax_type in allowed_tax_types %}
+                                        <option value="{{ tax_type }}">{{ tax_type }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="description">Description (Optional)</label>
+                            <textarea class="form-control" id="description" name="description" placeholder="Enter Description (Optional)"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Add Store Account Code</button>
+                    </form>
+                </div>
+            </div>
+
+
+
+            <!-- Store Account Codes Management Table -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h2 class="h5">Xero Account Codes Management</h2>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>Xero Account Code</th>
+                                    <th>Account Name</th>
+                                    <th>Account Type</th>
+                                    <th>Tax Type</th>
+                                    <th>Description</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="storeAccountCodesTableBody">
+                                {% for code in store_account_codes %}
+                                    <tr data-id="{{ code.id }}">
+                                        <td><span class="account_code">{{ code.account_code }}</span></td>
+                                        <td><span class="account_name">{{ code.account_name }}</span></td>
+                                        <td><span class="account_type">{{ code.account_type }}</span></td>
+                                        <td><span class="tax_type">{{ code.tax_type }}</span></td>
+                                        <td><span class="description">{{ code.description }}</span></td>
+                                        <td>
+                                            <button class="btn btn-sm btn-primary edit-store-account-code">Edit</button>
+                                            <button class="btn btn-sm btn-danger delete-store-account-code">Delete</button>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+
+            <!-- Edit Store Account Code Modal -->
+            <div class="modal fade" id="editStoreAccountCodeModal" tabindex="-1" role="dialog" aria-labelledby="editStoreAccountCodeModalLabel" aria-hidden="true">
+                <div class="modal-dialog" role="document">
+                    <div class="modal-content">
+                        <form id="editStoreAccountCodeForm">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="editStoreAccountCodeModalLabel">Edit Xero Account Code</h5>
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                </button>
+                            </div>
+                            
+                            <div class="modal-body">
+                                <input type="hidden" id="edit_store_account_code_id" name="store_account_code_id">
+                                <div class="form-group">
+                                    <label for="edit_account_code">Account Code</label>
+                                    <input type="text" class="form-control" id="edit_account_code" name="account_code" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="edit_account_name">Account Name</label>
+                                    <input type="text" class="form-control" id="edit_account_name" name="account_name" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="edit_account_type">Account Type</label>
+                                    <select id="edit_account_type" name="account_type" class="form-control" required>
+                                        <option value="" disabled>Select Account Type</option>
+                                        {% for account_type in allowed_account_types %}
+                                            <option value="{{ account_type }}">{{ account_type }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="edit_tax_type">Tax Type</label>
+                                    <select id="edit_tax_type" name="tax_type" class="form-control" required>
+                                        <option value="" disabled>Select Tax Type</option>
+                                        {% for tax_type in allowed_tax_types %}
+                                            <option value="{{ tax_type }}">{{ tax_type }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="edit_description">Description (Optional)</label>
+                                    <textarea class="form-control" id="edit_description" name="description"></textarea>
+                                </div>
+                            </div>
+                            
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                                <button type="submit" class="btn btn-primary">Save Changes</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+
+            
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h2 class="h5">Add Dom Nominal Code</h2>
+                </div>
+                <div class="card-body">
+                    <form id="addNominalCodeForm">
+                        <div class="form-row mb-2">
+                            <div class="form-group col-md-4">
+                                <label for="nominal_code">Nominal Code</label>
+                                <input type="text" class="form-control" id="nominal_code" name="nominal_code" placeholder="Enter Nominal Code" required>
+                            </div>
+                            <div class="form-group col-md-4">
+                                <label for="supplier_description">Supplier Description</label>
+                                <input type="text" class="form-control" id="supplier_description" name="supplier_description" placeholder="Enter Supplier Description" required>
+                            </div>
+                            <div class="form-group col-md-4">
+                                <label for="store_account_code_id">Assign Store Account Code</label>
+                                <select id="store_account_code_id" name="store_account_code_id" class="form-control" required>
+                                    <option value="" disabled selected>Select Store Account Code</option>
+                                    {% for store_account_code in store_account_codes %}
+                                        <option value="{{ store_account_code.id }}">{{ store_account_code.account_code }} - {{ store_account_code.account_name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Add Nominal Code</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h2 class="h5">Dom Nominal Codes Management</h2>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table id="nominalCodesTable" class="table table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>Nominal Code</th>
+                                    <th>Supplier Description</th>
+                                    <th>Assigned Store Account Code</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Nominal codes will be loaded dynamically via JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal for Editing Nominal Codes -->
+            <div class="modal fade" id="editNominalCodeModal" tabindex="-1" role="dialog" aria-labelledby="editNominalCodeModalLabel" aria-hidden="true">
+                <div class="modal-dialog" role="document">
+                    <div class="modal-content">
+                        <form id="editNominalCodeForm">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="editNominalCodeModalLabel">Edit Nominal Code</h5>
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                </button>
+                            </div>
+                                <div class="modal-body">
+                                    <input type="hidden" id="edit_nominal_code_id" name="nominal_code_id">
+                                    <div class="form-group">
+                                        <label for="edit_nominal_code">Nominal Code</label>
+                                        <input type="text" class="form-control" id="edit_nominal_code" name="nominal_code" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="edit_supplier_description">Supplier Description</label>
+                                        <input type="text" class="form-control" id="edit_supplier_description" name="supplier_description" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="edit_store_account_code_id">Assign Store Account Code</label>
+                                        <select id="edit_store_account_code_id" name="store_account_code_id" class="form-control" required>
+                                            {% for store_account_code in store_account_codes %}
+                                                <option value="{{ store_account_code.id }}">{{ store_account_code.account_code }} - {{ store_account_code.account_name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                            <div class="modal-footer">
+                                <button type="submit" class="btn btn-primary">Save Changes</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            
+
+
+            
+
+        
+        </div>
+
+        
+
+
+        <!-- Tracking Codes Section -->
+        <div class="tab-pane fade show active" id="tracking-codes" role="tabpanel" aria-labelledby="tracking-codes-tab">
+
+            <div class="card mb-4">
+                <div class="card-body">
+                    <button id="syncWithXero" class="btn btn-warning mb-2">Sync Xero Tracking Codes</button>
+                    <ul id="xero_sync_results" class="list-group scrollable-list"></ul>
+                </div>
+            </div>
+
+            <!-- Add Tracking Code Form -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h2 class="h5">Add Tracking Code</h2>
+                </div>
+                <div class="card-body">
+                    <form id="addTrackingCodeForm" class="form-inline">
+                        <div class="form-group mb-2 mr-2">
+                            <input type="text" id="tracking_code" name="tracking_code" placeholder="Enter Tracking Code"
+                                class="form-control" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary mb-2">Add Tracking Code</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Scrollable Tracking Codes List -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h2 class="h5">Tracking Codes</h2>
+                </div>
+                <div class="card-body">
+                    <ul id="tracking_codes_list" class="list-group scrollable-list">
+                        <!-- Tracking codes will be dynamically loaded here -->
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Add Group Tracking Code Form -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h2 class="h5">Add Group Tracking Code</h2>
+                </div>
+                <div class="card-body">
+                    <form id="addGroupTrackingCodeForm">
+                        <div class="form-group">
+                            <label for="group_code">Group Code</label>
+                            <input type="text" id="group_code" name="group_code" placeholder="Enter Group Code" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="tracking_code_filter">Filter Tracking Codes</label>
+                            <input type="text" id="tracking_code_filter" class="form-control mb-2" placeholder="Search tracking codes...">
+                        </div>
+                        <div class="form-group">
+                            <label for="selected_tracking_codes">Select Tracking Codes</label>
+                            <button type="button" id="select_all_btn" class="btn btn-secondary btn-sm mb-2">Select All</button>
+                            <button type="button" id="unselect_all_btn" class="btn btn-secondary btn-sm mb-2">Unselect All</button>
+                            <div class="form-check scrollable-list" id="tracking_code_checkboxes">
+                                <!-- Checkboxes will be dynamically loaded here -->
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Add Group Tracking Code</button>
+                    </form>
+                </div>
+            </div>
+
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h2 class="h5">Group Tracking Codes</h2>
+                </div>
+                <div class="card-body">
+                    <ul id="group_tracking_codes_list" class="list-group scrollable-list">
+                        <!-- Group tracking codes will be dynamically loaded here -->
+                    </ul>
+                </div>
+            </div>
+
+            <div class="modal fade" id="editGroupTrackingModal" tabindex="-1" aria-labelledby="editGroupTrackingModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="editGroupTrackingModalLabel">Edit Group Tracking Codes</h5>
+                            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="editGroupTrackingForm">
+                                <div class="form-group">
+                                    <label for="edit_group_code">Group Code</label>
+                                    <input type="text" id="edit_group_code" name="edit_group_code" class="form-control" readonly>
+                                </div>
+                                <div class="form-group">
+                                    <label for="tracking_code_filter_edit">Filter Tracking Codes</label>
+                                    <input type="text" id="tracking_code_filter_edit" class="form-control" placeholder="Filter Tracking Codes">
+                                </div>
+                                <div class="form-group">
+                                    <label for="edit_tracking_codes">Select Tracking Codes</label>
+                                    <div class="form-check scrollable-list" id="edit_tracking_code_checkboxes">
+                                        <!-- Tracking codes will be loaded here -->
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                            <button type="button" class="btn btn-primary" id="saveGroupTrackingChanges">Save changes</button>
+                        </div>
+                    </div>
+                </div>
+            </div>       
+
+        </div>
+
+        <!-- Companies Section -->
+        <div class="tab-pane fade" id="companies" role="tabpanel" aria-labelledby="companies-tab">
+            <!-- Companies List Table -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h2 class="h5">Companies</h2>
+                </div>
+                <div class="card-body">
+                    <table id="companies_table" class="table table-striped table-hover">
+                        <thead>
+                            <tr>
+                                <th>Company Name</th>
+                                <th>Company Code</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Data will be loaded dynamically here -->
+                        </tbody>
+                    </table>
+                    <div class="mt-3">
+                        <button id="saveAllChanges" class="btn btn-primary">Save Changes</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+
+        <!-- Account Codes Section -->
+        <div class="tab-pane fade" id="account-codes" role="tabpanel" aria-labelledby="account-codes-tab">
+            
+            
+            <!-- Sync Xero Account Codes Button -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <button id="syncXeroAccountCodes" class="btn btn-warning mb-2">Sync Xero Account Codes</button>
+                    <ul id="xero_account_sync_results" class="list-group scrollable-list"></ul>
+                </div>
+            </div>
+            
+            
+            <!-- Add Account Code per Business Form -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h2 class="h5">Add Account Code per Business</h2>
+                </div>
+                <div class="card-body">
+                    <form id="addBusinessAccountCodeForm" class="form-inline">
+                        <div class="form-group mb-2 mr-2">
+                            <input type="text" id="business_account_code" name="business_account_code" placeholder="Enter Business Account Code" class="form-control" required>
+                        </div>
+                        <div class="form-group mb-2 mr-2">
+                            <input type="text" id="business_descriptor" name="business_descriptor" placeholder="Enter Business Descriptor" class="form-control" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary mb-2">Add Business Account Code</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Business Account Codes Management Table -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h2 class="h5">Business Account Codes Management</h2>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table id="businessAccountCodesTable" class="table table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>Business Account Code</th>
+                                    <th>Business Descriptor</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="businessAccountCodesTableBody">
+                                <!-- Business account codes will be dynamically loaded here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+
+            <!-- Edit Business Account Code Modal -->
+            <div class="modal fade" id="editBusinessAccountCodeModal" tabindex="-1" role="dialog" aria-labelledby="editBusinessAccountCodeModalLabel" aria-hidden="true">
+                <div class="modal-dialog" role="document">
+                    <div class="modal-content">
+                        <form id="editBusinessAccountCodeForm">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="editBusinessAccountCodeModalLabel">Edit Business Account Code</h5>
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                </button>
+                            </div>
+                            
+                            <div class="modal-body">
+                                <input type="hidden" id="edit_business_account_code_id" name="business_account_code_id">
+                                <div class="form-group">
+                                    <label for="edit_business_account_code">Business Account Code</label>
+                                    <input type="text" class="form-control" id="edit_business_account_code" name="business_account_code" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="edit_business_descriptor">Business Descriptor</label>
+                                    <input type="text" class="form-control" id="edit_business_descriptor" name="business_descriptor" required>
+                                </div>
+                            </div>
+                            
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                                <button type="submit" class="btn btn-primary">Save Changes</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+
+
+            
+            <!-- Scrollable Account Codes per DMS List -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h2 class="h5">Xero Account Codes</h2>
+                </div>
+                <div class="card-body">
+                    <table id="dms_account_codes_table" class="table table-striped table-bordered">
+                        <thead>
+                            <tr>
+                                <th>Xero Account Code</th>
+                                <th>Xero Description</th>
+                                <th>Business Account Code</th>
+                                <th>Business Description</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- DMS account codes will be dynamically loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+
+
+    </div>
+</div>
+{% endblock %}
+
+
+{% block scripts %}
+<script>
+    $(document).ready(function() {
+        // Initialize DataTables where needed
+
+        // Initialize DataTable globally (without data, at first)
+        let businessAccountCodesTable = $('#businessAccountCodesTable').DataTable({
+            paging: true,         // Enable pagination
+            searching: true,      // Enable search
+            ordering: true,       // Enable ordering
+            destroy: true,        // Allow re-initialization after reload
+            dom: '<"top"lf>rt<"bottom"Bip>',  // Ensure length menu (l), filter (f), and buttons (B) are shown
+            buttons: [
+                {
+                    extend: 'csvHtml5',  // Enable CSV export
+                    text: 'Export to CSV',
+                    className: 'btn btn-primary'  // Add Bootstrap class for a modern look
+                }
+            ],
+            columns: [
+                { data: 'Business Account Code' },
+                { data: 'Business Descriptor' },
+                { data: 'Actions', orderable: false }
+            ]
+        });
+
+
+        let trackingTable = $('#trackingCategoriesTable').DataTable({
+            "destroy": true,  // Allow re-initialization
+            "paging": true,   // Enable pagination
+            "searching": true,  // Enable searching
+            "ordering": true,   // Enable column ordering
+            "pageLength": 10,  // Default number of rows per page
+            "lengthMenu": [[5, 10, 20, -1], [5, 10, 20, "All"]],  // Page length options
+            "dom": '<"top"lfB>rt<"bottom"ip><"clear">',  // Layout control
+            "buttons": [
+                {
+                    extend: 'csvHtml5',
+                    text: '<i class="fa fa-download"></i>',  // Using FontAwesome icon
+                    className: 'btn btn-primary btn-export',  // Button styling
+                    titleAttr: 'Export to CSV',  // Tooltip for the button
+                    exportOptions: {
+                        columns: ':visible',  // Export visible columns only
+                        format: {
+                            body: function (data, row, column, node) {
+                                // Check for input within the table cell and extract its value
+                                return $(node).find('input').val() || data.replace(/<[^>]+>/g, '').trim();
+                            }
+                        }
+                    }
+                }
+            ],
+            "language": {
+                "search": "Filter records:",
+                "lengthMenu": "Display _MENU_ records per page",
+                "info": "Showing _START_ to _END_ of _TOTAL_ entries",
+                "paginate": {
+                    "first": "First",
+                    "last": "Last",
+                    "next": "Next",
+                    "previous": "Previous"
+                }
+            },
+            "responsive": true,  // Responsive design
+            "autoWidth": false  // Disable automatic column width
+        });
+
+        let companiesTable = $('#companies_table').DataTable({
+            paging: true,
+            searching: true,
+            ordering: true,
+            dom: '<"top"lfB>rt<"bottom"ip>',  // Layout settings
+            buttons: [
+                {
+                    extend: 'csvHtml5',  // Use the HTML5 button extension for more features
+                    text: '<i class="bi bi-file-earmark-spreadsheet"></i> Export CSV',
+                    className: 'btn btn-primary',
+                    exportOptions: {
+                        columns: ':visible',  // Export only the visible columns
+                        format: {
+                            body: function (data, row, column, node) {
+                                // Check if the node has an input, and return the value of the input
+                                return column === 1 ? $(node).find('input').val() : data;  // Specifically for the company code column
+                            }
+                        }
+                    }
+                }
+            ],
+            columns: [
+                { data: 'company_name' },
+                { data: 'company_code', orderable: false }
+            ]
+        });
+
+        // Nominal Codes Table Initialization
+        const nominalCodesTable = $('#nominalCodesTable').DataTable({
+            columns: [
+                { data: 'nominal_code' },
+                { data: 'supplier_description' },
+                { data: 'store_account_code' },
+                { data: 'actions', orderable: false },
+                { data: 'id', visible: false },  // Hidden ID column
+                { data: 'store_account_code_id', visible: false }  // Hidden Store Account Code ID
+            ]
+        });
+
+        // Load initial data
+        loadCompanies();
+        loadTrackingCategories();
+        loadTrackingCodes();
+        loadBusinessAccountCodes();
+        loadDMSAccountCodes();
+        loadNominalCodes();
+
+
+        // Function definitions
+
+        // Handle Edit Group Tracking Codes button click
+        $('#group_tracking_codes_list').on('click', '.edit-group', function () {
+            var groupId = $(this).data('id');
+            var groupCode = $(this).data('group');
+
+            // Set the group code in the modal
+            $('#edit_group_code').val(groupCode);
+
+            // Load the tracking codes and mark the ones that are already assigned
+            $.get('/get_tracking_codes', function (data) {
+                $('#edit_tracking_code_checkboxes').empty();
+                data.tracking_codes.forEach(function (code) {
+                    $('#edit_tracking_code_checkboxes').append(
+                        '<div class="form-check">' +
+                        '<input class="form-check-input" type="checkbox" name="edit_tracking_codes" value="' + code.tracking_code + '">' +
+                        '<label class="form-check-label">' + code.tracking_code + '</label>' +
+                        '</div>'
+                    );
+                });
+
+                // Fetch the assigned codes for the selected group
+                $.get('/get_group_tracking_codes', function (groupData) {
+                    var selectedGroup = groupData.group_tracking_codes.find(group => group.id == groupId);
+                    selectedGroup.tracking_codes.forEach(function (assignedCode) {
+                        $('input[value="' + assignedCode.tracking_code + '"]').prop('checked', true);
+                    });
+
+                    // Show the modal
+                    $('#editGroupTrackingModal').modal('show');
+                });
+            });
+        });
+
+
+        function loadCompanies() {
+            $.get('/get_companies', function (data) {
+                companiesTable.clear();
+                let companiesData = data.companies.map(company => {
+                    return {
+                        company_name: company.company_name,
+                        company_code: `
+                            <input type="text" class="form-control company-code-input" 
+                            data-company-id="${company.id}" value="${company.company_code || ''}">
+                        `
+                    };
+                });
+                companiesTable.rows.add(companiesData).draw();
+            }).fail(function () {
+                console.error('Error fetching companies.');
+            });
+        }
+
+        function loadTrackingCategories() {
+            $.get('/get_tracking_categories', function (data) {
+                let tableBody = $('#trackingCategoriesTableBody');
+                tableBody.empty();  // Clear existing table data
+
+                // Populate the table body with new rows
+                data.forEach(function (category) {
+                    let row = `
+                        <tr data-tracking-option-id="${category.tracking_option_id}">
+                            <td>${category.tenant_name}</td>
+                            <td>${category.tracking_category_name}</td>
+                            <td>${category.tracking_category_option}</td>
+                            <td><input type="text" class="form-control store-number-input" value="${category.store_number}"></td>
+                            <td><input type="text" class="form-control store-postcode-input" value="${category.store_postcode}"></td>
+                            <td><input type="text" class="form-control store-contact-input" value="${category.store_contact}"></td>
+                        </tr>
+                    `;
+                    tableBody.append(row);
+                });
+
+                // Redraw the DataTable after adding new rows
+                trackingTable.clear().rows.add($('#trackingCategoriesTableBody tr')).draw();
+            });
+        }
+
+
+        function loadBusinessAccountCodes() {
+            $.get('/get_business_account_codes', function (data) {
+                // Clear and destroy the current DataTable instance
+                $('#businessAccountCodesTable').DataTable().clear().destroy();
+
+                // Prepare the data for DataTables
+                let accountCodesData = data.business_account_codes.map(function (account) {
+                    return [
+                        account.account_code_per_business,
+                        account.descriptor_per_business.trim(),
+                        `<button class="btn btn-sm btn-primary edit-business-account-code" data-id="${account.id}">Edit</button> 
+                        <button class="btn btn-sm btn-danger delete-business-account-code" data-id="${account.id}">Delete</button>`
+                    ];
+                });
+
+                // Reinitialize DataTable with the new data and export button
+                let businessAccountCodesTable = $('#businessAccountCodesTable').DataTable({
+                    data: accountCodesData,  // Pass the prepared data
+                    columns: [
+                        { title: "Business Account Code" },
+                        { title: "Business Descriptor" },
+                        { title: "Actions", orderable: false }
+                    ],
+                    dom: '<"top"lf>rt<"bottom"Bip>',  // Ensure length menu (l), filter (f), and buttons (B) are shown
+                    buttons: [
+                        {
+                            extend: 'csvHtml5',  // Enable CSV export
+                            text: 'Export to CSV',
+                            className: 'btn btn-primary'  // Add Bootstrap class for a modern look
+                        }
+                    ]
+                });
+                
+
+                // Re-attach event listeners for dynamically loaded rows
+                attachBusinessAccountCodeEventListeners();
+            }).fail(function (xhr, status, error) {
+                console.error("Error loading business account codes:", status, error);
+                alert("Failed to load business account codes. Please try again.");
+            });
+        }
+
+
+
+
+        function loadDMSAccountCodes() {
+            $.get('/get_dms_account_codes', function (data) {
+                $('#dms_account_codes_table').DataTable().clear().destroy();  // Clear and destroy the old DataTable
+
+                $('#dms_account_codes_table tbody').empty();  // Clear the table body
+
+                // Append the updated list of account codes
+                data.dms_account_codes.forEach(function (account) {
+                    $('#dms_account_codes_table tbody').append(
+                        '<tr id="dms-account-' + account.id + '">' +
+                        '<td>' + account.account_code_per_dms + '</td>' +
+                        '<td>' + account.descriptor_per_dms + '</td>' +
+                        '<td>' + account.account_code_per_business + '</td>' +
+                        '<td>' + account.descriptor_per_business + '</td>' +
+                        '<td><button class="btn btn-danger btn-sm delete-dms-account" data-id="' + account.id + '">Delete</button></td>' +
+                        '</tr>'
+                    );
+                });
+
+                // Reinitialize the DataTable after reloading data
+                $('#dms_account_codes_table').DataTable({
+                    responsive: true,
+                    paging: true,
+                    searching: true,
+                    destroy: true,  // Allow re-initialization after reload
+                    dom: '<"top"lfB>rt<"bottom"ip>',  // Add the Buttons and table length control
+                    buttons: [
+                        'csv',  // Enable CSV export button
+                    ]
+                });
+            });
+        }
+
+        $(document).on('click', '.delete-dms-account', function() {
+            const dmsAccountId = $(this).data('id'); // Fetch the account ID from the button
+
+            if (confirm('Are you sure you want to delete this DMS account code?')) {
+                $.ajax({
+                    url: '/delete_dms_account_code',  // The Flask route to handle the deletion
+                    type: 'POST',
+                    data: { dms_account_id: dmsAccountId },  // Pass the ID to the backend
+                    success: function(response) {
+                        if (response.status === 'success') {
+                            // Optionally reload the table
+                            loadDMSAccountCodes();  // Reload DMS account codes to update the list
+                        } else {
+                            alert('Failed to delete the account code.');
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Error deleting DMS account code:', error);
+                    }
+                });
+            }
+        });
+
+
+        function loadTrackingCodes() {
+            $.get('/get_tracking_codes', function (data) {
+                // Update tracking codes list
+                $('#tracking_codes_list').empty();
+                data.tracking_codes.forEach(function (code) {
+                    $('#tracking_codes_list').append(
+                        '<li id="tracking-code-' + code.id + '" class="list-group-item d-flex justify-content-between align-items-center">' +
+                        code.tracking_code +
+                        ' <button class="btn btn-danger btn-sm delete-tracking" data-id="' + code.id + '">Delete</button></li>'
+                    );
+                });
+
+                // Update tracking code checkboxes
+                $('#tracking_code_checkboxes').empty();
+                data.tracking_codes.forEach(function (code) {
+                    $('#tracking_code_checkboxes').append(
+                        '<div class="form-check">' +
+                        '<input class="form-check-input" type="checkbox" name="selected_tracking_codes" value="' + code.tracking_code + '">' +
+                        '<label class="form-check-label">' + code.tracking_code + '</label>' +
+                        '</div>'
+                    );
+                });
+            });
+
+            $.get('/get_group_tracking_codes', function (data) {
+                // Clear existing entries
+                $('#group_tracking_codes_list').empty();
+
+                data.group_tracking_codes.forEach(function (group) {
+                    var fullCodes = group.tracking_codes.map(function (code) {
+                        return '<span class="badge badge-info">' + code.tracking_code + '</span>';
+                    });
+
+                    // Limit visible codes to 5
+                    var visibleCodes = fullCodes.slice(0, 5);
+
+                    // List item HTML
+                    var listItemHTML = `
+                        <li id="group-code-${group.id}" class="list-group-item">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>${group.group_code} <span class="badge badge-secondary">${fullCodes.length} Codes</span></div>
+                                <div id="visible-codes-${group.id}">${visibleCodes.join(' ')}</div>
+                            </div>
+                            <div class="btn-group">
+                                <button class="btn btn-primary btn-sm edit-group" data-id="${group.id}" data-group="${group.group_code}">Edit</button>
+                                <button class="btn btn-danger btn-sm delete-group" data-id="${group.id}">Delete</button>
+                            </div>
+                        </li>
+                    `;
+
+                    // Append to list
+                    $('#group_tracking_codes_list').append(listItemHTML);
+                });
+            });
+
+
+        }
+
+        // Attach event listeners
+        attachStoreAccountCodeEventListeners();
+        attachNominalCodeEventListeners();
+        attachBusinessAccountCodeEventListeners();
+
+        // Event listener for Save button click
+        $('#saveAllChanges').click(function () {
+            let updatedCompanies = [];
+
+            // Iterate over each company code input field
+            $('.company-code-input').each(function () {
+                let companyId = $(this).data('company-id');
+                let companyCode = $(this).val().trim(); // Allow blank values
+
+                // Push each company (even if code is blank) to be updated
+                updatedCompanies.push({ company_id: companyId, company_code: companyCode });
+            });
+
+            // Debugging: check what is being sent
+            console.log(updatedCompanies);
+
+            // Send updated companies to server
+            $.ajax({
+                url: '/update_company_codes',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ companies: updatedCompanies }),
+                success: function (response) {
+                    if (response.status === 'success') {
+                        alert('Company codes updated successfully');
+                        loadCompanies(); // Reload the updated companies list
+                    } else {
+                        alert('Error updating company codes: ' + response.message);
+                    }
+                },
+                error: function () {
+                    alert('An error occurred while updating company codes.');
+                }
+            });
+        });
+
+        // Sync tracking categories with Xero when button is clicked
+        $('#syncWithXeroCodes').click(function () {
+            $.post('/sync_tracking_categories_with_xero', function (response) {
+                if (response.status === 'success') {
+                    alert('Tracking categories synced successfully');
+                    loadTrackingCategories(); // Reload the tracking categories from the database
+                } else {
+                    alert('Error: ' + response.message);
+                }
+            });
+        });
+
+        // Function to handle "Select All" for visible checkboxes
+        $('#select_all_btn').click(function () {
+            // Only select checkboxes that are currently visible (filtered)
+            $('#tracking_code_checkboxes .form-check:visible input[type="checkbox"]').prop('checked', true);
+        });
+
+        // Function to handle "Unselect All" for visible checkboxes
+        $('#unselect_all_btn').click(function () {
+            // Only unselect checkboxes that are currently visible (filtered)
+            $('#tracking_code_checkboxes .form-check:visible input[type="checkbox"]').prop('checked', false);
+        });
+
+        // Function to filter tracking codes
+        $('#tracking_code_filter').on('input', function () {
+            var filterText = $(this).val().toLowerCase();
+
+            // Filter through each checkbox and its label inside the .form-check container
+            $('#tracking_code_checkboxes .form-check').each(function () {
+                var label = $(this).find('label').text().toLowerCase(); // Get the label text
+                if (label.indexOf(filterText) > -1) {
+                    $(this).show();  // Show the matching element
+                } else {
+                    $(this).hide();  // Hide non-matching elements
+                }
+            });
+        });
+
+        // Function to filter tracking codes (Edit Group)
+        $('#tracking_code_filter_edit').on('input', function () {
+            var filterText = $(this).val().toLowerCase();
+            // Filter through each checkbox and its label inside the .form-check container
+            $('#edit_tracking_code_checkboxes .form-check').each(function () {
+                var label = $(this).find('label').text().toLowerCase();
+                if (label.indexOf(filterText) > -1) {
+                    $(this).show();  // Show the matching element
+                } else {
+                    $(this).hide();  // Hide non-matching elements
+                }
+            });
+        });
+
+        // Handle Add Tenant Form via AJAX
+        $('#addTenantForm').submit(function (e) {
+            e.preventDefault();  // Prevent form from submitting the traditional way
+            var tenantName = $('#tenant_name').val();
+
+            $.ajax({
+                url: '{{ url_for("main.add_tenant") }}',  // Use your Flask route
+                type: 'POST',
+                data: { tenant_name: tenantName },
+                success: function (response) {
+                    if (response.status === 'success') {
+                        // Clear the tenant select input
+                        $('#tenant_name').val('');
+
+                        // Append the new tenant to the list
+                        $('#dom_tenants_list').append(`
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                ${tenantName}
+                                <button class="btn btn-danger btn-sm delete-tenant" data-id="${response.tenant_id}">Delete</button>
+                            </li>
+                        `);
+                    } else {
+                        alert('Error: ' + response.message);
+                    }
+                },
+                error: function () {
+                    alert('There was an error adding the tenant.');
+                }
+            });
+        });
+
+        // Handle delete tenant button via AJAX
+        $(document).on('click', '.delete-tenant', function () {
+            var tenantId = $(this).data('id');
+            var tenantElement = $(this).closest('li');
+
+            $.ajax({
+                url: '/delete_tenant/' + tenantId,  // Adjust based on your Flask route
+                type: 'POST',
+                success: function (response) {
+                    if (response.status === 'success') {
+                        tenantElement.remove();  // Remove the tenant from the DOM
+                    } else {
+                        alert('Error: ' + response.message);
+                    }
+                },
+                error: function () {
+                    alert('There was an error deleting the tenant.');
+                }
+            });
+        });
+
+        // Handle Save Changes for editing group tracking codes
+        $('#saveGroupTrackingChanges').click(function () {
+            var updatedTrackingCodes = [];
+            $('#edit_tracking_code_checkboxes input[type="checkbox"]:checked').each(function () {
+                updatedTrackingCodes.push($(this).val());
+            });
+
+            // Save the changes via AJAX (you'll need to handle this route in Flask)
+            $.post('/update_group_tracking_codes', {
+                group_code: $('#edit_group_code').val(),
+                tracking_codes: updatedTrackingCodes
+            }, function (response) {
+                $('#editGroupTrackingModal').modal('hide');
+                loadTrackingCodes();  // Reload the tracking codes after updating
+            });
+        });
+
+        // Add Tracking Code
+        $('#addTrackingCodeForm').on('submit', function (e) {
+            e.preventDefault();
+            $.post('/add_tracking_code', $(this).serialize(), function (response) {
+                loadTrackingCodes(); // Reload tracking codes
+                $('#tracking_code').val(''); // Clear input field
+            });
+        });
+
+        // Add Group Tracking Code
+        $('#addGroupTrackingCodeForm').on('submit', function (e) {
+            e.preventDefault();
+            $.post('/add_group_tracking_code', $(this).serialize(), function (response) {
+                loadTrackingCodes(); // Reload group tracking codes and tracking codes
+                $('#group_code').val(''); // Clear input field
+            });
+        });
+
+        // Delete Tracking Code
+        $('#tracking_codes_list').on('click', '.delete-tracking', function () {
+            var trackingCodeId = $(this).data('id');
+            $.post('/delete_tracking_code', { tracking_code_id: trackingCodeId }, function (response) {
+                if (response.status === 'success') {
+                    loadTrackingCodes(); // Reload tracking codes
+                }
+            });
+        });
+
+        // Delete Group Tracking Code
+        $('#group_tracking_codes_list').on('click', '.delete-group', function () {
+            var groupCodeId = $(this).data('id');
+            $.post('/delete_group_tracking_code', { group_code_id: groupCodeId }, function (response) {
+                if (response.status === 'success') {
+                    loadTrackingCodes(); // Reload group tracking codes
+                }
+            });
+        });
+
+        // Sync with Xero (Tracking Codes)
+        $('#syncWithXero').click(function () {
+            $.post('/sync_with_xero', function (response) {
+                $('#xero_sync_results').empty();
+                if (response.codes_to_add.length === 0 && response.codes_not_in_xero.length === 0) {
+                    $('#xero_sync_results').append('<li class="list-group-item">No new codes to add. Everything is synced.</li>');
+                } else {
+                    if (response.codes_to_add.length > 0) {
+                        $('#xero_sync_results').append('<li class="list-group-item font-weight-bold">New Codes to Add:</li>');
+                        response.codes_to_add.forEach(function (code) {
+                            $('#xero_sync_results').append(
+                                '<li class="list-group-item">' + code + 
+                                ' <button class="btn btn-success btn-sm ml-2 add-code-btn" data-code="' + code + '">Add as Tracking Code</button>' +
+                                ' <button class="btn btn-primary btn-sm ml-2 add-group-code-btn" data-code="' + code + '">Add as Group Tracking Code</button></li>'
+                            );
+                        });
+                    }
+
+                    if (response.codes_not_in_xero.length > 0) {
+                        $('#xero_sync_results').append('<li class="list-group-item font-weight-bold">Codes Not in Xero:</li>');
+                        response.codes_not_in_xero.forEach(function (code) {
+                            $('#xero_sync_results').append('<li class="list-group-item">' + code + '</li>');
+                        });
+                    }
+                }
+            });
+        });
+
+        $('#trackingCategoriesForm').submit(function (e) {
+            e.preventDefault();
+            let updatedCategories = [];
+
+            $('#trackingCategoriesTableBody tr').each(function() {
+                let trackingOptionId = $(this).data('tracking-option-id');
+                let storeNumber = $(this).find('.store-number-input').val();
+                let storePostcode = $(this).find('.store-postcode-input').val();
+                let storeContact= $(this).find('.store-contact-input').val();
+
+                updatedCategories.push({
+                    tracking_option_id: trackingOptionId,
+                    store_number: storeNumber,
+                    store_postcode: storePostcode,
+                    store_contact: storeContact
+                });
+            });
+
+            $.ajax({
+                url: '/save_tracking_categories',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({categories: updatedCategories}),
+                success: function(response) {
+                    if (response.status === 'success') {
+                        alert('Tracking categories saved successfully.');
+                    } else {
+                        alert('Error saving tracking categories: ' + response.message);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    alert('Error: ' + xhr.responseText);
+                }
+            });
+        });
+
+        // Handle Sync Xero Account Codes button click
+        $('#syncXeroAccountCodes').click(function () {
+            $.post('/sync_xero_account_codes', function (response) {
+                $('#xero_account_sync_results').empty();
+                
+                if (response.codes_to_add.length === 0) {
+                    $('#xero_account_sync_results').append('<li class="list-group-item">No new account codes to add. Everything is synced.</li>');
+                } else {
+                    $('#xero_account_sync_results').append('<li class="list-group-item font-weight-bold">New Account Codes to Add:</li>');
+
+                    // Fetch business account codes first
+                    $.get('/get_business_account_codes', function (businessData) {
+                        var businessOptions = '';
+
+                        // Build business options from the fetched data
+                        businessData.business_account_codes.forEach(function (business) {
+                            businessOptions += '<option value="' + business.id + '">' + business.account_code_per_business + '</option>';
+                        });
+
+                        // Now add each Xero account code with business dropdown and descriptor
+                        response.codes_to_add.forEach(function (item) {
+                            $('#xero_account_sync_results').append(
+                                '<li class="list-group-item">' +
+                                item.account_code + ' (' + item.descriptor_per_dms + ')' +  // Display both code and descriptor
+                                ' <select class="form-control d-inline-block business-select" style="width: 150px;" data-code="' + item.account_code + '">' +
+                                businessOptions +  // Populate the dropdown with business options
+                                '</select>' +
+                                ' <button class="btn btn-success btn-sm ml-2 add-account-code-btn" data-code="' + item.account_code + '" data-descriptor="' + item.descriptor_per_dms + '">Add as Account Code</button>' +
+                                '</li>'
+                            );
+                        });
+                    });
+                }
+            });
+        });
+
+        // Handle Add as Tracking Code button click
+        $('#xero_sync_results').on('click', '.add-code-btn', function () {
+            var trackingCode = $(this).data('code');
+            var button = $(this); // Store the reference to the clicked button
+
+            $.post('/add_tracking_code_from_xero', { code: trackingCode }, function () {
+                alert('Tracking Code added.');
+
+                // Change the button text and disable it
+                button.text('Added').addClass('clicked').prop('disabled', true);
+
+                // Hide the sibling "Add as Group Tracking Code" button
+                button.siblings('.add-group-code-btn').hide();
+
+                loadTrackingCodes(); // Refresh the list if needed
+            });
+        });
+
+        // Handle Add as Group Tracking Code button click
+        $('#xero_sync_results').on('click', '.add-group-code-btn', function () {
+            var groupCode = $(this).data('code');
+            var button = $(this); // Store the reference to the clicked button
+
+            $.post('/add_group_tracking_code_from_xero', { code: groupCode }, function () {
+                alert('Group Tracking Code added.');
+
+                // Change the button text and disable it
+                button.text('Added as Group').addClass('clicked').prop('disabled', true);
+
+                // Hide the sibling "Add as Tracking Code" button
+                button.siblings('.add-code-btn').hide();
+
+                loadTrackingCodes(); // Refresh the list if needed
+            });
+        });
+
+        // Handle Add Account Code button click
+        $('#xero_account_sync_results').on('click', '.add-account-code-btn', function () {
+            var accountCode = $(this).data('code');
+            var descriptor = $(this).data('descriptor');  // Get the descriptor value
+            var businessId = $(this).siblings('select').val(); // Get the selected business ID
+            var button = $(this); // Store the reference to the clicked button
+
+            if (!businessId) {
+                alert('Please select a business for the account code.');
+                return;
+            }
+
+            // Post the data to add the account code
+            $.post('/add_account_code_from_xero', {
+                code: accountCode,
+                business_id: businessId,
+                descriptor_per_dms: descriptor  // Send the descriptor from Xero
+            }, function (response) {
+                if (response.status === 'success') {
+                    alert('Account Code added.');
+                    button.text('Added').addClass('clicked').prop('disabled', true);
+                    button.siblings('select').hide(); // Hide the business dropdown after adding
+                } else {
+                    alert('Error adding account code. Please try again.');
+                }
+            }).fail(function(xhr, status, error) {
+                console.log('AJAX error:', error); // Log the error if the request fails
+                alert('An error occurred. Please try again.');
+            });
+        });
+
+        // Handle Sync with Xero Store Account Codes
+        $('#syncWithXeroStoreAccountCodes').click(function () {
+            const resultList = $('#xero_sync_results_codes');
+            resultList.html('<li class="list-group-item">Syncing... Please wait.</li>');
+
+            $.post('/sync_xero_store_account_codes', function (data) {
+                resultList.empty();
+
+                if (data.status === 'success') {
+                    if (Object.keys(data.new_codes_in_tenants).length > 0) {
+                        resultList.append('<li class="list-group-item font-weight-bold">New Codes Added to Tenants:</li>');
+                        for (const [tenantName, codes] of Object.entries(data.new_codes_in_tenants)) {
+                            resultList.append(`<li class="list-group-item">${tenantName}: ${codes.join(', ')}</li>`);
+                        }
+                    } else {
+                        resultList.append('<li class="list-group-item">All tenants already have all store account codes.</li>');
+                    }
+
+                    if (data.errors && data.errors.length > 0) {
+                        resultList.append('<li class="list-group-item text-danger font-weight-bold">Errors:</li>');
+                        data.errors.forEach(function (error) {
+                            resultList.append('<li class="list-group-item text-danger">' + error + '</li>');
+                        });
+                    }
+                } else {
+                    resultList.html('<li class="list-group-item text-danger">Error: ' + data.message + '</li>');
+                }
+            }).fail(function () {
+                console.error('Error syncing Xero account codes.');
+                resultList.html('<li class="list-group-item text-danger">An error occurred during syncing.</li>');
+            });
+        });
+
+        // Attach event listeners for dynamically generated buttons (Edit and Delete)
+        function attachBusinessAccountCodeEventListeners() {
+            // Use event delegation to handle dynamically added buttons
+            $(document).off('click', '.edit-business-account-code').on('click', '.edit-business-account-code', function () {
+                const codeId = $(this).data('id');  // Fetch the account ID
+                const row = $(this).closest('tr');  // Get the closest table row
+
+                const businessAccountCode = row.find('td:eq(0)').text();  // First column contains the business account code
+                const businessDescriptor = row.find('td:eq(1)').text();   // Second column contains the descriptor
+
+                // Populate the edit form with the selected row's data
+                $('#edit_business_account_code_id').val(codeId);
+                $('#edit_business_account_code').val(businessAccountCode);
+                $('#edit_business_descriptor').val(businessDescriptor);
+
+                // Show the modal
+                $('#editBusinessAccountCodeModal').modal('show');
+            });
+
+            // Handle Delete button click
+            $(document).off('click', '.delete-business-account-code').on('click', '.delete-business-account-code', function () {
+                const codeId = $(this).data('id');  // Fetch the account ID
+                const row = $(this).closest('tr');  // Get the row element to remove it later
+                const table = $('#businessAccountCodesTable').DataTable(); // Get DataTable instance
+
+                if (confirm('Are you sure you want to delete this business account code?')) {
+                    fetch(`/delete_business_account_code/${codeId}`, {
+                        method: 'POST'
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Use DataTable API to remove the row
+                            table.row(row).remove().draw();  // Correctly remove and redraw the table
+                            alert('Business account code deleted successfully');
+                        } else {
+                            alert('Error: ' + data.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error deleting business account code:', error);
+                        alert('Error: ' + error.message);
+                    });
+                }
+            });
+        }
+
+
+        // Handle Add Business Account Code Form submission
+        $('#addBusinessAccountCodeForm').on('submit', function (e) {
+            e.preventDefault(); // Prevent default form submission
+
+            const formData = new FormData(this);
+
+            fetch('/add_business_account_code', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Business Account Code added successfully');
+
+                    // Clear the form fields
+                    this.reset();
+
+                    // Append the new Business Account Code to the table dynamically
+                    const newRow = `
+                        <tr data-id="${data.business_account_code.id}">
+                            <td class="business_account_code">${data.business_account_code.business_account_code}</td>
+                            <td class="business_descriptor">${data.business_account_code.business_descriptor}</td>
+                            <td>
+                                <button class="btn btn-sm btn-primary edit-business-account-code">Edit</button>
+                                <button class="btn btn-sm btn-danger delete-business-account-code">Delete</button>
+                            </td>
+                        </tr>
+                    `;
+                    $('#businessAccountCodesTableBody').append(newRow);
+
+                    // Re-attach event listeners if necessary
+                    attachBusinessAccountCodeEventListeners();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error adding business account code:', error);
+                alert('Error: ' + error.message);
+            });
+        });
+
+
+        
+        // Store Account Codes Functionality
+
+        // Add Store Account Code
+        $('#addStoreAccountCodeForm').on('submit', function (e) {
+            e.preventDefault();
+
+            const formData = new FormData(this);
+
+            fetch('/add_store_account_code', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(data => {
+                        throw new Error(data.message || 'Unknown error');
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    alert('Store Account Code added successfully');
+
+                    // Clear the form fields
+                    this.reset();
+
+                    // Append the new Store Account Code to the table dynamically
+                    const newRow = `
+                        <tr data-id="${data.store_account_code.id}">
+                            <td class="account_code">${data.store_account_code.account_code}</td>
+                            <td class="account_name">${data.store_account_code.account_name}</td>
+                            <td class="account_type">${data.store_account_code.account_type}</td>
+                            <td class="tax_type">${data.store_account_code.tax_type}</td>
+                            <td class="description">${data.store_account_code.description || ''}</td>
+                            <td>
+                                <button class="btn btn-sm btn-primary edit-store-account-code">Edit</button>
+                                <button class="btn btn-sm btn-danger delete-store-account-code">Delete</button>
+                            </td>
+                        </tr>
+                    `;
+                    $('#storeAccountCodesTableBody').append(newRow);
+
+                    // Update the Nominal Code form's dropdown
+                    const storeAccountCodeSelect = $('#store_account_code_id, #edit_store_account_code_id');
+                    const newOption = $('<option>', {
+                        value: data.store_account_code.id,
+                        text: `${data.store_account_code.account_code} - ${data.store_account_code.account_name}`
+                    });
+                    storeAccountCodeSelect.append(newOption);
+
+                    // Re-attach event listeners to new buttons
+                    attachStoreAccountCodeEventListeners();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error adding store account code:', error);
+                alert('Error: ' + error.message);
+            });
+        });
+
+
+        // Function to attach event listeners for Store Account Codes
+        function attachStoreAccountCodeEventListeners() {
+            // Handle Edit button click for Store Account Codes
+            $('#storeAccountCodesTableBody').off('click', '.edit-store-account-code').on('click', '.edit-store-account-code', function () {
+                const row = $(this).closest('tr');
+                const storeAccountCodeId = row.data('id');
+                const accountCode = row.find('.account_code').text();
+                const accountName = row.find('.account_name').text();
+                const accountType = row.find('.account_type').text();
+                const taxType = row.find('.tax_type').text();
+                const description = row.find('.description').text();
+
+                // Populate the modal with existing data
+                $('#edit_store_account_code_id').val(storeAccountCodeId);
+                $('#edit_account_code').val(accountCode);
+                $('#edit_account_name').val(accountName);
+                $('#edit_account_type').val(accountType);
+                $('#edit_tax_type').val(taxType);
+                $('#edit_description').val(description);
+
+                // Show the modal
+                $('#editStoreAccountCodeModal').modal('show');
+            });
+
+            // Handle Delete button click for Store Account Codes
+            $('#storeAccountCodesTableBody').off('click', '.delete-store-account-code').on('click', '.delete-store-account-code', function () {
+                const row = $(this).closest('tr');
+                const storeAccountCodeId = row.data('id');
+
+                if (confirm('Are you sure you want to delete this store account code?')) {
+                    fetch(`/delete_store_account_code/${storeAccountCodeId}`, {
+                        method: 'POST'
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Remove the row from the table
+                            row.remove();
+
+                            // Remove the option from the Nominal Code form's dropdown
+                            const optionToRemove = $(`#store_account_code_id option[value="${storeAccountCodeId}"], #edit_store_account_code_id option[value="${storeAccountCodeId}"]`);
+                            if (optionToRemove.length) {
+                                optionToRemove.remove();
+                            }
+                        } else {
+                            alert('Error: ' + data.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error deleting store account code:', error);
+                    });
+                }
+            });
+        }
+
+        // Handle Edit Store Account Code Form submission
+        $('#editStoreAccountCodeForm').on('submit', function (e) {
+            e.preventDefault();
+
+            const formData = new FormData(this);
+
+            fetch('/edit_store_account_code', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(data => {
+                        throw new Error(data.message || 'Unknown error');
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    const storeAccountCodeId = formData.get('store_account_code_id');
+                    // Update the row in the table
+                    const row = $(`tr[data-id="${storeAccountCodeId}"]`);
+                    row.find('.account_code').text(formData.get('account_code'));
+                    row.find('.account_name').text(formData.get('account_name'));
+                    row.find('.account_type').text(formData.get('account_type'));
+                    row.find('.tax_type').text(formData.get('tax_type'));
+                    row.find('.description').text(formData.get('description'));
+
+                    // Update the option in the Nominal Code form's dropdown
+                    const optionToUpdate = $(`#store_account_code_id option[value="${storeAccountCodeId}"], #edit_store_account_code_id option[value="${storeAccountCodeId}"]`);
+                    if (optionToUpdate.length) {
+                        optionToUpdate.text(`${formData.get('account_code')} - ${formData.get('account_name')}`);
+                    }
+
+                    // Hide the modal
+                    $('#editStoreAccountCodeModal').modal('hide');
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error editing store account code:', error);
+                alert('Error: ' + error.message);
+            });
+        });
+
+
+
+
+
+        function loadNominalCodes() {
+            $.ajax({
+                url: '/get_nominal_codes',
+                type: 'GET',
+                success: function(data) {
+                    nominalCodesTable.clear();
+
+                    data.nominal_codes.forEach(function(code) {
+                        nominalCodesTable.row.add({
+                            'nominal_code': code.nominal_code,
+                            'supplier_description': code.supplier_description,
+                            'store_account_code': code.store_account_code.account_code + ' - ' + code.store_account_code.account_name,
+                            'actions': `
+                                <button class="btn btn-sm btn-primary edit-code">Edit</button>
+                                <button class="btn btn-sm btn-danger delete-code">Delete</button>
+                            `,
+                            'id': code.id,  // Include ID
+                            'store_account_code_id': code.store_account_code_id  // Include Store Account Code ID
+                        });
+                    });
+
+                    nominalCodesTable.draw();
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error loading nominal codes:', error);
+                }
+            });
+        }
+
+
+        
+
+        function attachNominalCodeEventListeners() {
+
+            // Add Nominal Code
+            $('#addNominalCodeForm').on('submit', function(e) {
+                e.preventDefault();
+
+                const formData = $(this).serialize();
+
+                $.ajax({
+                    url: '/add_nominal_code',
+                    type: 'POST',
+                    data: formData,
+                    success: function(data) {
+                        if (data.success) {
+                            alert('Nominal code added successfully.');
+                            $('#addNominalCodeForm')[0].reset();
+
+                            // Add the new code to the DataTable
+                            const code = data.nominal_code;
+                            nominalCodesTable.row.add({
+                                'nominal_code': code.nominal_code,
+                                'supplier_description': code.supplier_description,
+                                'store_account_code': code.store_account_code.account_code + ' - ' + code.store_account_code.account_name,
+                                'actions': `
+                                    <button class="btn btn-sm btn-primary edit-code">Edit</button>
+                                    <button class="btn btn-sm btn-danger delete-code">Delete</button>
+                                `,
+                                'id': code.id,
+                                'store_account_code_id': code.store_account_code_id
+                            }).draw();
+
+                        } else {
+                            alert('Error adding nominal code: ' + data.message);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        if (xhr.status === 409) {  // Check if the error is 409 Conflict (duplicate nominal code)
+                            const response = JSON.parse(xhr.responseText);
+                            alert(response.message);  // Display the duplicate error message to the user
+                        } else {
+                            alert('An error occurred while adding the nominal code. Please try again.');
+                        }
+                    }
+                });
+            });
+
+
+            // Edit Nominal Code - Open Modal
+            $('#nominalCodesTable').on('click', '.edit-code', function() {
+                const rowData = nominalCodesTable.row($(this).parents('tr')).data();
+                const nominalCodeId = rowData.id;
+
+                // Set the form fields
+                $('#edit_nominal_code_id').val(rowData.id);
+                $('#edit_nominal_code').val(rowData.nominal_code);
+                $('#edit_supplier_description').val(rowData.supplier_description);
+                $('#edit_store_account_code_id').val(rowData.store_account_code_id);
+
+                $('#editNominalCodeModal').modal('show');
+            });
+
+            // Edit Nominal Code - Save Changes
+            $('#editNominalCodeForm').on('submit', function(e) {
+                e.preventDefault();
+
+                const nominalCodeId = $('#edit_nominal_code_id').val();
+                const formData = $(this).serialize();
+
+                $.ajax({
+                    url: `/edit_nominal_code/${nominalCodeId}`,
+                    type: 'POST',
+                    data: formData,
+                    success: function(data) {
+                        if (data.success) {
+                            alert('Nominal code updated successfully.');
+                            $('#editNominalCodeModal').modal('hide');
+
+                            // Update the row in the DataTable using the data from the server
+                            const updatedCode = data.nominal_code;
+                            const rowIndex = nominalCodesTable.row(function(idx, data, node) {
+                                return data.id == updatedCode.id;
+                            }).index();
+
+                            if (rowIndex !== undefined && rowIndex !== null) {
+                                // Update the DataTable row data
+                                nominalCodesTable.row(rowIndex).data({
+                                    'nominal_code': updatedCode.nominal_code,
+                                    'supplier_description': updatedCode.supplier_description,
+                                    'store_account_code': updatedCode.store_account_code.account_code + ' - ' + updatedCode.store_account_code.account_name,
+                                    'actions': `
+                                        <button class="btn btn-sm btn-primary edit-code">Edit</button>
+                                        <button class="btn btn-sm btn-danger delete-code">Delete</button>
+                                    `,
+                                    'id': updatedCode.id,
+                                    'store_account_code_id': updatedCode.store_account_code_id
+                                }).draw(false);
+                            } else {
+                                console.error('Row not found in DataTable');
+                            }
+                        } else {
+                            alert('Error updating nominal code: ' + data.message);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Error updating nominal code:', error);
+                    }
+                });
+            });
+
+
+
+            // Delete Nominal Code
+            $('#nominalCodesTable').on('click', '.delete-code', function() {
+                const rowData = nominalCodesTable.row($(this).parents('tr')).data();
+                const nominalCodeId = rowData.id;
+
+                if (confirm('Are you sure you want to delete this nominal code?')) {
+                    $.ajax({
+                        url: `/delete_nominal_code/${nominalCodeId}`,
+                        type: 'POST',
+                        success: function(data) {
+                            if (data.success) {
+                                alert('Nominal code deleted successfully.');
+
+                                // Remove the row from the DataTable
+                                const row = nominalCodesTable.row(function(idx, data, node) {
+                                    return data.id == nominalCodeId;
+                                });
+
+                                if (row) {
+                                    row.remove().draw();
+                                }
+                            } else {
+                                alert('Error deleting nominal code: ' + data.message);
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            console.error('Error deleting nominal code:', error);
+                        }
+                    });
+                }
+            });
+        
+        }
+
+        // Ensure tabs function properly
+        $('#settingsTabs a').on('click', function (e) {
+                e.preventDefault();
+                $(this).tab('show');
+            });
+
+        // Initial tab load
+        $('.nav-tabs a:first').tab('show');
+
+    });
+</script>
+{% endblock %}

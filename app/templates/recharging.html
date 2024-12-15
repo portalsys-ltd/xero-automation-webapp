@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+
+{% block title %}
+Run Recharging
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="page-title">Run Recharge on Data</h1>
+
+    <!-- File Upload Container -->
+    <div class="card">
+        <div class="card-header">
+            <h5>File Upload</h5>
+        </div>
+        <div class="card-body">
+            <form method="post" enctype="multipart/form-data" action="{{ url_for('recharging.upload_file') }}">
+                <div class="form-group">
+                    <label for="file">Upload CSV or Excel File:</label>
+                    <input type="file" id="file" name="file" accept=".csv, .xls, .xlsx" class="form-control" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Upload File</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Data Processing Container -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5>Data Processing</h5>
+        </div>
+        <div class="card-body">
+            <form id="run-recharging-form" method="post" action="{{ url_for('recharging.run_recharging') }}">
+                <div class="form-group">
+                    <label for="selected_month">Select Month:</label>
+                    <select name="selected_month" id="selected_month" class="form-control" required>
+                        <!-- Month options will be populated by JavaScript -->
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="selected_year">Select Year:</label>
+                    <select name="selected_year" id="selected_year" class="form-control" required>
+                        <!-- Year options will be populated by JavaScript -->
+                    </select>
+                </div>
+
+                <!-- Last Invoice Number (Fetched Dynamically) -->
+                <div class="form-group">
+                    <p id="last_invoice_number_display">Please select a month and year.</p>
+                    <input type="hidden" id="last_invoice_number" name="last_invoice_number">
+                </div>      
+                <button type="submit" id="process-button" class="btn btn-primary" disabled>Process Data</button>
+                
+                <!-- Loading Spinner -->
+                <div id="loading-spinner" class="text-center mt-4" style="display: none;">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/b/b1/Loading_icon.gif" alt="Loading..." style="width: 50px;">
+                    <p>Processing... Please wait.</p>
+                </div>
+            
+            </form>
+        </div>
+    </div>
+
+    <!-- Upload to Xero Container -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5>Upload to Xero</h5>
+        </div>
+        <div class="card-body">
+            <form id="upload-to-xero-form" method="post" action="{{ url_for('recharging.upload_to_xero') }}">
+                <button type="submit" class="btn btn-success" id="upload-xero-btn">Upload to Xero</button>
+            </form>
+            <div id="xero-loading-spinner" style="display: none;" class="text-center mt-4">
+                <img src="https://upload.wikimedia.org/wikipedia/en/thumb/9/9f/Xero_software_logo.svg/2048px-Xero_software_logo.svg.png" alt="Xero Logo" style="width: 50px;">
+                <p>Processing complete!</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+
+{% block scripts %}
+<!-- JavaScript to handle the form submission and trigger the download -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+$(document).ready(function() {
+
+    // Disable the process button initially
+    $('#process-button').prop('disabled', true);
+
+    // Get today's date
+    const today = new Date();
+    
+    // Create an array to store the last three months
+    const months = [];
+    const years = new Set(); // Using a Set to ensure unique years
+    
+    // Populate the months array with the last three months
+    for (let i = 0; i < 3; i++) {
+        let monthDate = new Date(today.getFullYear(), today.getMonth() - i, 1);
+        months.push(monthDate);
+        years.add(monthDate.getFullYear()); // Add the year to the Set (duplicates are automatically handled)
+    }
+
+    // Populate the month dropdown
+    months.forEach(monthDate => {
+        const month = monthDate.getMonth() + 1; // Months are zero-indexed
+        const monthName = monthDate.toLocaleString('default', { month: 'long' });
+
+        // Append month option to the dropdown
+        $('#selected_month').append(`<option value="${month}">${monthName}</option>`);
+    });
+    
+    // Populate the year dropdown (only unique years)
+    years.forEach(year => {
+        $('#selected_year').append(`<option value="${year}">${year}</option>`);
+    });
+
+    // Automatically set the selected option for month and year
+    $('#selected_month').val(today.getMonth() + 1);
+    $('#selected_year').val(today.getFullYear());
+
+    // Disable the process button initially
+    $('#process-button').prop('disabled', true);
+
+    // Fetch the last invoice number when the page loads
+    fetchLastInvoiceNumber();
+
+    // When the selected month or year changes or is clicked
+    $('#selected_month, #selected_year').on('change click', function() {
+        fetchLastInvoiceNumber();
+    });
+
+    function fetchLastInvoiceNumber() {
+        var selected_month = $('#selected_month').val();
+        var selected_year = $('#selected_year').val();
+
+        if (selected_month && selected_year) {
+            // Make an AJAX request to get the last invoice number
+            $.ajax({
+                url: '{{ url_for("recharging.get_last_invoice_number_route") }}',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    selected_month: selected_month,
+                    selected_year: selected_year
+                }),
+                success: function(response) {
+                    if (response.status === 'success') {
+                        // Update the display with the last invoice number and enable the process button
+                        $('#last_invoice_number_display').text('Last Invoice Number: ' + response.last_invoice_number);
+                        $('#last_invoice_number').val(response.last_invoice_number);
+                        $('#process-button').prop('disabled', false); // Enable button
+                    } else if (response.status === 'error') {
+                        // Display the error message and disable the process button
+                        $('#last_invoice_number_display').text('Error: ' + response.message);
+                        $('#last_invoice_number').val('');
+                        $('#process-button').prop('disabled', true); // Disable button
+                    }
+                },
+                error: function() {
+                    alert('An error occurred while fetching the last invoice number.');
+                }
+            });
+        }
+    }
+
+    $('#run-recharging-form').on('submit', function(event) {
+        event.preventDefault(); // Prevent default form submission
+
+        // Disable the process button and show the loading spinner
+        $('#process-button').prop('disabled', true);
+        $('#loading-spinner').show();
+
+        // Show the loading spinner
+        $('#loading-spinner').show();
+
+        $.ajax({
+            url: '{{ url_for("recharging.run_recharging") }}',
+            type: 'POST',
+            data: $(this).serialize(), // Ensure form data is sent correctly
+            xhrFields: {
+                responseType: 'blob' // Expect binary data (ZIP file)
+            },
+            success: function(blob, status, xhr) {
+                $('#loading-spinner').hide();
+
+                var contentType = xhr.getResponseHeader('Content-Type');
+                if (contentType === 'application/zip') {
+                    // Handle the success response (downloading the ZIP file)
+                    var filename = "";
+                    var disposition = xhr.getResponseHeader('Content-Disposition');
+                    if (disposition && disposition.indexOf('attachment') !== -1) {
+                        var filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+                        var matches = filenameRegex.exec(disposition);
+                        if (matches != null && matches[1]) filename = matches[1].replace(/['"]/g, '');
+                    }
+
+                    var downloadUrl = window.URL.createObjectURL(blob);
+
+                    if (filename) {
+                        var a = document.createElement("a");
+                        a.href = downloadUrl;
+                        a.download = filename;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                    } else {
+                        window.location = downloadUrl;
+                    }
+
+                    setTimeout(function() { window.URL.revokeObjectURL(downloadUrl); }, 100);
+                    alert("Download started successfully.");
+                } else {
+                    alert("Unexpected content type received.");
+                }
+            },
+                
+            error: function(xhr, status, error) {
+                $('#loading-spinner').hide();
+
+                // Check if the response contains a JSON error message
+                try {
+                    var response = JSON.parse(xhr.responseText);
+
+                    if (response.status === 'error') {
+                        // Display a user-friendly error message as a popup
+                        alert(response.message);
+                    } else {
+                        alert("An unexpected error occurred.");
+                    }
+                } catch (e) {
+                    alert("An unexpected error occurred while processing your request.");
+                }
+            }
+        });
+    });
+
+    $('#upload-to-xero-form').on('submit', function(event) {
+        event.preventDefault(); // Prevent default form submission
+
+        // Disable the upload button
+        $('#upload-xero-btn').prop('disabled', true);
+
+        // Show the loading spinner for Xero upload
+        $('#xero-loading-spinner').show();
+        $('#xero-logo-spinner').css('animation', 'rotate 2s linear infinite');
+        $('#xero-loading-spinner p').text("Uploading to Xero... Please wait."); // Reset message
+
+        // Start the Xero upload process with a Celery task
+        $.ajax({
+            url: '{{ url_for("recharging.upload_to_xero") }}',
+            type: 'POST',
+            success: function(response) {
+                checkTaskProgress(response.task_id); // Monitor task progress
+            },
+            error: function(xhr, status, error) {
+                $('#xero-loading-spinner').hide();
+                $('#upload-xero-btn').prop('disabled', false); // Re-enable the button on error
+
+                // Check if the response is JSON and contains the error message
+                if (xhr.status === 400 && xhr.responseJSON && xhr.responseJSON.message) {
+                    alert(xhr.responseJSON.message); // Show the specific error message
+                } else {
+                    alert("An error occurred while uploading to Xero."); // Generic error message
+                }
+            }
+        });
+    });
+
+    // Function to poll for task progress
+    function checkTaskProgress(taskId) {
+        var interval = setInterval(function() {
+            $.getJSON('{{ url_for("recharging.celery_task_status", task_id="") }}' + taskId, function(response) {
+                if (response.state === 'SUCCESS') {
+                    clearInterval(interval);
+                    $('#xero-logo-spinner').css('animation', 'none'); // Stop spinning
+                    $('#xero-loading-spinner p').text("Processing complete!"); // Update message to success
+
+                    // Automatically trigger CSV download
+                    window.location.href = '{{ url_for("recharging.download_log_csv", task_id="") }}' + taskId;
+
+                    $('#upload-xero-btn').prop('disabled', false); // Re-enable the button
+                } else if (response.state === 'FAILURE') {
+                    clearInterval(interval);
+                    $('#xero-logo-spinner').css('animation', 'none'); // Stop spinning
+                    $('#xero-loading-spinner p').text("Task completed with errors."); // Update message to error
+                    $('#upload-xero-btn').prop('disabled', false); // Re-enable the button
+                }
+            });
+        }, 2000); // Poll every 2 seconds
+    }
+
+
+});
+</script>
+{% endblock %}
+
+{% block styles %}
+<style>
+    .xero-process-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+    }
+
+    #xero-logo-spinner {
+        width: 50px;
+        height: auto;
+    }
+
+    @keyframes rotate {
+        100% {
+            transform: rotate(360deg);
+        }
+    }
+
+    /* Ensure the spinner has the correct animation when it's visible */
+    #xero-logo-spinner {
+        animation: rotate 2s linear infinite;
+    }
+</style>
+{% endblock %}
