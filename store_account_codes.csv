@@ -1,0 +1,44 @@
+6,0041,"Furniture and Fixtures - Cost -additions","",FIXED,INPUT2,2
+7,9998,"Suspense Account","",OVERHEADS,NONE,2
+8,7013,"Staff Training Cost","",OVERHEADS,INPUT2,2
+9,7504,"Dominos - Computer Support ","",OVERHEADS,INPUT2,2
+10,7100,"Property - Rent","",OVERHEADS,INPUT2,2
+11,4001,"STORE - SALES","",REVENUE,OUTPUT2,2
+12,6005,"Domino's Operations Evaluation Report","",EXPENSE,INPUT2,2
+13,5007,"Recharge Service Charge (VAT) ","",DIRECTCOSTS,INPUT2,2
+14,6200,"Sales Promotions ","",OVERHEADS,INPUT2,2
+15,5006,"C3 National Deal - Food Cost Support","",DIRECTCOSTS,INPUT2,2
+16,8203,"Dominos - Clothing with VAT ","",OVERHEADS,INPUT2,2
+17,8200,"Dominos - Donations ","",OVERHEADS,NONE,2
+18,5004,"Commisary Rebate Scheme ","",DIRECTCOSTS,INPUT2,2
+19,6002,"Dominos - Royalties ","",OVERHEADS,INPUT2,2
+20,7804,"Dominos - Store Equipment with VAT ","",OVERHEADS,INPUT2,2
+21,5100,"Food - Delivery (Dominos) ","",DIRECTCOSTS,INPUT2,2
+22,6001,"Dominos - Advertising Levy ","",OVERHEADS,INPUT2,2
+23,7799,"Cleaning - Dominos Cleaning ","",OVERHEADS,INPUT2,2
+24,6300,"Dominos - Interactive Management Charge","",OVERHEADS,INPUT2,2
+25,5002,"Food - Food Non VAT ","",DIRECTCOSTS,ZERORATEDINPUT,2
+26,5001,"Food - Food with VAT","",DIRECTCOSTS,INPUT2,2
+27,6301,"Dominos - INTERACTIVE CHARGES","",OVERHEADS,INPUT2,2
+28,0041,"Furniture and Fixtures - Cost -additions","",FIXED,INPUT2,1
+29,4001,"STORE - SALES","",REVENUE,OUTPUT2,1
+30,5001,"Food without VAT","",DIRECTCOSTS,INPUT2,1
+31,5002,"Food - Food Non VAT","",DIRECTCOSTS,ZERORATEDINPUT,1
+32,5004,"Commisary Rebate Scheme","",DIRECTCOSTS,INPUT2,1
+33,5006,"C3 National Deal - Food Cost Support","",DIRECTCOSTS,INPUT2,1
+34,5007,"Recharge Insurance Charge (VAT)","",DIRECTCOSTS,INPUT2,1
+35,5100,"Food - Delivery","",DIRECTCOSTS,INPUT2,1
+36,6001,"Dominos - Advertising Levy","",OVERHEADS,INPUT2,1
+37,6002,"Dominos - Royalties","",OVERHEADS,INPUT2,1
+38,6005,"Dominos - Other Admin and Marketing Charges","",EXPENSE,INPUT2,1
+39,6200,"Sales Promotions","",OVERHEADS,INPUT2,1
+40,6300,"Interactive Management Charge","",OVERHEADS,INPUT2,1
+41,7013,"Staff Training Cost","",OVERHEADS,INPUT2,1
+42,7100,"Property - Rent","",OVERHEADS,INPUT2,1
+43,7504,"Dominos - Computer Support","",OVERHEADS,INPUT2,1
+44,7799,"Cleaning - Dominos Cleaning","",OVERHEADS,INPUT2,1
+45,7804,"Store Equipment with VAT","",OVERHEADS,INPUT2,1
+46,8200,"Dominos - Donations","",OVERHEADS,NONE,1
+47,8203,"Dominos - Clothing with VAT","",OVERHEADS,INPUT2,1
+48,9998,"Suspense Account","",OVERHEADS,NONE,1
+49,6301,"Dominos - INTERACTIVE CHARGES","",OVERHEADS,INPUT2,1
