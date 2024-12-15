@@ -191,7 +191,7 @@ def xero_login():
 
     # Check the environment and set the redirect URL accordingly
     if os.environ.get('FLASK_ENV') == 'production':
-        redirect_url = "https://xero-automation-webapp-dd8c38571179.herokuapp.com/xero/callback"
+        redirect_url = url_for("xero.oauth_callback", _external=True)
     else:
         redirect_url = url_for("xero.oauth_callback", _external=True)
         redirect_url = redirect_url.replace("127.0.0.1", "localhost")  # Ensure localhost is used
