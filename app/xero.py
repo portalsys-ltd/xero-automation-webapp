@@ -130,6 +130,8 @@ def get_xero_client_for_user(user):
     return api_client, xero_app
 
 def refresh_xero_token(refresh_token, user):
+    client_id = current_app.config.get("CLIENT_ID")
+    client_secret = current_app.config.get("CLIENT_SECRET")
     try:
         # Make a request to the Xero token endpoint to refresh the token
         response = requests.post(
@@ -189,7 +191,7 @@ def xero_login():
 
     # Check the environment and set the redirect URL accordingly
     if os.environ.get('FLASK_ENV') == 'production':
-        redirect_url = "https://xero-automation-webapp-dd8c38571179.herokuapp.com/xero_settings"
+        redirect_url = "https://xero-automation-webapp-dd8c38571179.herokuapp.com/xero/oauth_callback"
     else:
         redirect_url = url_for("xero.oauth_callback", _external=True)
         redirect_url = redirect_url.replace("127.0.0.1", "localhost")  # Ensure localhost is used
