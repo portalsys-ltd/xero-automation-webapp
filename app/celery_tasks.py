@@ -15,7 +15,7 @@ import pandas as pd
 import pdfplumber
 import csv
 from io import StringIO, BytesIO
-import matplotlib.pyplot as plt
+
 
 
 from flask import session, jsonify, current_app
