@@ -54,8 +54,7 @@ oauth = OAuth()
 load_dotenv()
 
 def get_xero_client_for_user(user):
-    add_log(f"Client id {client_id}, Client Secret {client_secret}.", "general")
-    
+
     # Get client_id and client_secret from Flask app config
     client_id = current_app.config.get("CLIENT_ID")
     client_secret = current_app.config.get("CLIENT_SECRET")
