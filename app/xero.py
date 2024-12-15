@@ -1,6 +1,6 @@
 # app/xero.py
 
-from flask import Blueprint, redirect, url_for, session, jsonify, request
+from flask import Blueprint, redirect, url_for, session, jsonify, request, current_app
 import requests
 from app import db
 from app.routes.logs import LogEntry, add_log
@@ -22,6 +22,7 @@ import pandas as pd
 import time
 import dateutil.parser
 import os
+from dotenv import load_dotenv
 
 
 from xero_python.accounting import AccountingApi, Account, Accounts, AccountType, Allocation, Allocations, BatchPayment, BatchPayments, BankTransaction, BankTransactions, BankTransfer, BankTransfers, Contact, Contacts, ContactGroup, ContactGroups, ContactPerson, CreditNote, CreditNotes, Currency, Currencies, CurrencyCode, Employee, Employees, ExpenseClaim, ExpenseClaims, HistoryRecord, HistoryRecords, Invoice, Invoices, Item, Items, LineAmountTypes, LineItem, Payment, Payments, PaymentService, PaymentServices, Phone, Purchase, Quote, Quotes, Receipt, Receipts, RepeatingInvoice, RepeatingInvoices, Schedule, TaxComponent, TaxRate, TaxRates, TaxType, TrackingCategory, TrackingCategories, TrackingOption, TrackingOptions, User, Users, LineItemTracking
@@ -50,13 +51,22 @@ xero_bp = Blueprint('xero', __name__, url_prefix='/xero')
 # Set up OAuth for Xero
 oauth = OAuth()
 
+load_dotenv()
+
+
+
+
 def get_xero_client_for_user(user):
+    # Get client_id and client_secret from Flask app config
+    client_id = current_app.config.get("CLIENT_ID")
+    client_secret = current_app.config.get("CLIENT_SECRET")
+
     # Create an OAuth2 token for the user
     xero_app = oauth.remote_app(
         name="xero",
         version="2",
-        client_id="E65D6D2CD7B6438C8FC7BBE21764826A",
-        client_secret="mMxOFA2nRbHZDdgK_QDEa8z_Nhx-Ym2UE-o_rOavjQhykzPG",
+        client_id=client_id,
+        client_secret=client_secret,
         endpoint_url="https://api.xero.com/",
         authorization_url="https://login.xero.com/identity/connect/authorize",
         access_token_url="https://identity.xero.com/connect/token",
@@ -69,8 +79,8 @@ def get_xero_client_for_user(user):
     api_client = ApiClient(
         Configuration(
             oauth2_token=OAuth2Token(
-                client_id="E65D6D2CD7B6438C8FC7BBE21764826A",
-                client_secret="mMxOFA2nRbHZDdgK_QDEa8z_Nhx-Ym2UE-o_rOavjQhykzPG",
+                client_id=client_id,
+                client_secret=client_secret,
             ),
         ),
         pool_threads=1,
@@ -128,8 +138,8 @@ def refresh_xero_token(refresh_token, user):
             data={
                 'grant_type': 'refresh_token',
                 'refresh_token': refresh_token,
-                'client_id':"E65D6D2CD7B6438C8FC7BBE21764826A",
-                'client_secret':"mMxOFA2nRbHZDdgK_QDEa8z_Nhx-Ym2UE-o_rOavjQhykzPG",
+                'client_id':client_id,
+                'client_secret':client_secret,
             }
         )
 

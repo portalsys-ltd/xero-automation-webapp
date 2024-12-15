@@ -27,6 +27,8 @@ class Config:
 class DevelopmentConfig(Config):
     """Development configuration."""
     DEBUG = True
+    CLIENT_ID = os.environ.get('DEV_CLIENT_ID', 'E65D6D2CD7B6438C8FC7BBE21764826A')  # Default for dev
+    CLIENT_SECRET = os.environ.get('DEV_CLIENT_SECRET', 'mMxOFA2nRbHZDdgK_QDEa8z_Nhx-Ym2UE-o_rOavjQhykzPG')  # Default for dev
     ENV = 'development'
 
 class TestingConfig(Config):
@@ -41,6 +43,8 @@ class ProductionConfig(Config):
     """Production configuration."""
     DEBUG = False
     ENV = 'production'
+    CLIENT_ID = os.environ.get('PROD_CLIENT_ID', 'E8AFD93A1BE64127B687FDA803BB1279')  # Fetch from environment
+    CLIENT_SECRET = os.environ.get('PROD_CLIENT_SECRET', '-7XlTsjGazMK0IMiHeB2oJ8Vy40h-14yVkNMP8YzWErqH5dp')  # Fetch from environment
     # Add more production-specific configurations here, like secure cookies, HTTPS, etc.
 
 config = {
