@@ -23,8 +23,6 @@ class Config:
     CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
 
 
-   
-
     # Default ENV set to 'development', change it if needed in production
     ENV = os.environ.get('FLASK_ENV', 'production')
     DEBUG = False

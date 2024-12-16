@@ -5,7 +5,7 @@ import os
 
 # Print environment variables for debugging
 print("BROKER_URL:", os.environ.get("BROKER_URL"))
-print("RESULT_BACKEND:", os.environ.get("RESULT_BACKEND"))
+print("CELERY_RESULT_BACKEND:", os.environ.get("CELERY_RESULT_BACKEND"))
 
 
 config_name = os.getenv('FLASK_CONFIG') or 'default'
