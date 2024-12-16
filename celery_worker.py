@@ -4,8 +4,8 @@ from app import create_app, make_celery
 import os
 
 # Print environment variables for debugging
-print("CELERY_BROKER_URL:", os.environ.get("CELERY_BROKER_URL"))
-print("CELERY_RESULT_BACKEND:", os.environ.get("CELERY_RESULT_BACKEND"))
+print("BROKER_URL:", os.environ.get("BROKER_URL"))
+print("RESULT_BACKEND:", os.environ.get("RESULT_BACKEND"))
 
 
 config_name = os.getenv('FLASK_CONFIG') or 'default'
