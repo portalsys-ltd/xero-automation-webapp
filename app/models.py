@@ -224,6 +224,20 @@ class StoreAccountCodes(db.Model):
         self.user_id = user_id
 
 
+class TaskStatus(db.Model):
+    __tablename__ = 'task_status'
+
+    id = db.Column(db.Integer, primary_key=True)
+    task_id = db.Column(db.String(255), nullable=False, unique=True)
+    user_id = db.Column(db.Integer, nullable=False)  # Associate with user
+    task_type = db.Column(db.String(50), nullable=False)  # Type of task (e.g., 'recharging', 'uploading')
+    status = db.Column(db.String(50), default='pending')  # Status: pending, in_progress, completed, failed
+    result = db.Column(db.Text, nullable=True)  # Result or error message
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+
 
 
 

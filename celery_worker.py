@@ -13,3 +13,5 @@ celery = make_celery(app)  # Initialize Celery with the app
 
 if __name__ == '__main__':
     celery.start()
+
+

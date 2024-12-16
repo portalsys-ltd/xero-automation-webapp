@@ -24,6 +24,8 @@ from app.xero import get_last_invoice_number
 import xlsxwriter
 from openpyxl import load_workbook
 
+from app.celery_tasks import process_recharging_task
+
 # Define the blueprint
 recharging_bp = Blueprint('recharging', __name__, url_prefix='/recharging')
 
@@ -110,518 +112,624 @@ def get_last_invoice_number_route():
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)})
+    
 
 
-
-
-# Route to handle the 'run macros' functionality (now recharging process)
 @recharging_bp.route('/run', methods=['POST'])
 @user_login_required
 def run_recharging():
-    if request.method == 'POST':
-        try:
-            user_id = session.get('user_id')
-            user = User.query.get(user_id)
-            current_company = user.company_name
-            current_username = user.username
-            # Log when the process starts
-            add_log("Processing Macro button pressed", log_type="general")
+    try:
+        user_id = session.get('user_id')
+        selected_month = int(request.form['selected_month'])
+        selected_year = int(request.form['selected_year'])
+        last_invoice_number = int(request.form['last_invoice_number']) + 1
 
-            selected_month = int(request.form['selected_month'])
-            selected_year = int(request.form['selected_year'])
-            lastInvoiceNumber = int(request.form['last_invoice_number']) + 1  # Now automatically 
-            #lastInvoiceNumber = manual set
+        task_type = 'recharging'
 
-            selected_month_str = f"{selected_year}-{selected_month:02d}"
-            selected_month_year_str_filenames = f"{datetime(1900, selected_month, 1).strftime('%B')} {selected_year}"
+        # Check if there's an active task of the same type for this user
+        active_task = TaskStatus.query.filter_by(user_id=user_id, task_type=task_type, status='in_progress').first()
+        if active_task:
+            print("task in progress")
+            return jsonify({"status": "error", "message": "A recharging task is already in progress."}), 400
 
-            add_log(f"Selected month: {selected_month_str}", log_type="general")
+        # Trigger Celery task
+        task = process_recharging_task.apply_async(args=[user_id, selected_month, selected_year, last_invoice_number])
 
-            # Query the database for account transactions for the logged-in user
-            transactions = AccountTransaction.query.filter_by(user_id=session['user_id']).all()
-            
+        # Save task details to the database
+        new_task = TaskStatus(
+            task_id=task.id,
+            user_id=user_id,
+            task_type=task_type,
+            status='in_progress'
+        )
+        db.session.add(new_task)
+        db.session.commit()
 
-            # Example of handling an error case
-            if not transactions:
-                add_log("No data found for the current user.", log_type="error")
-                return jsonify({"status": "error", "message":"No data found for the current user. Please check the logs."}), 400
+        return jsonify({"status": "success", "message": "Processing started", "task_id": task.id})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
-            add_log(f"Found {len(transactions)} transactions for the user.", log_type="general")
+@recharging_bp.route('/download/<task_id>', methods=['GET'])
+def download_file(task_id):
+    task_result = process_recharging_task.AsyncResult(task_id)
 
-            # Convert the transaction records to a pandas DataFrame
-            transaction_data = [
-                {
-                    'Date': t.date,
-                    'Source': t.source,
-                    'Contact': t.contact,
-                    'Description': t.description,
-                    'Reference': t.reference,
-                    'Debit': t.debit,
-                    'Credit': t.credit,
-                    'Gross': t.gross,
-                    'Net': t.net,
-                    'VAT': t.vat,
-                    'Account Code': t.account_code,
-                    'Account': t.account,
-                    'tracking_group1': t.tracking_group1,
-                    'tracking_group2': t.tracking_group2
-                } for t in transactions
-            ]
-            df_unfiltered = pd.DataFrame(transaction_data)
+    # Fetch task from the database
+    task_status = TaskStatus.query.filter_by(task_id=task_id).first()
 
-            # Calculate the sum of the 'Net' column
-            net_sum = df_unfiltered['Net'].sum()
+    if not task_status:
+        return jsonify({"status": "error", "message": "Task not found"}), 404
 
-            # Print the sum of the 'Net' column
-            print(f"Sum of 'Net' column: {net_sum}")
+    if task_result.state == 'SUCCESS':
+        file_path = task_result.result.get('file_path')  # This should now point to `static/temp_files/`
 
-            if df_unfiltered.empty:
-                add_log("No data found in DataFrame after converting transactions.", log_type="error")
-                return jsonify({"status": "error", "message": "No data found in data.csv."}), 400
+        if os.path.exists(file_path):
+            # Mark task as completed if not already done
+            if task_status.status != 'completed':
+                task_status.status = 'completed'
+                db.session.commit()
 
-            # Filter by the selected month and year
-
-            # Step 1: Try to parse the 'Date' with the first format ('%Y-%m-%d')
-            df_unfiltered['Date'] = pd.to_datetime(df_unfiltered['Date'], format='%Y-%m-%d', errors='coerce')
-
-            # Step 2: For rows where the 'Date' is NaT (failed to parse), try the second format ('%d %b %Y')
-            df_unfiltered['Date'] = df_unfiltered['Date'].fillna(pd.to_datetime(df_unfiltered['Date'], format='%d %b %Y', errors='coerce'))
-            
-
-            df  = df_unfiltered[(df_unfiltered['Date'].dt.month == selected_month) &
-                                        (df_unfiltered['Date'].dt.year == selected_year)]
-
-
-            if df.empty:
-                add_log(f"No transactions found for {selected_month_str}.", log_type="error")
-                return jsonify({"status": "error", "message": f"No transactions found for {selected_month_str}."}), 400
-            else:
-                add_log(f"Found {len(df)} transactions for {selected_month_str}.", log_type="general")
-
-
-            # Further processing with logs
-            modified_df = combine_last_two_columns(df)
-            columns_to_drop = ['Debit', 'Credit', 'Gross', 'VAT']
-            modified_df = modified_df.drop(columns=columns_to_drop, errors='ignore')
-            modified_df['Account Code Per Business'] = ''
-            modified_df['Account Code Per Business Description'] = ''
-            modified_df['Net'] = modified_df['Net'].astype(float)
-
-            add_log("DataFrame modified successfully. Dropped unnecessary columns and added business account codes.", log_type="general")
-
-            # Get all account codes per DMS and map them to business account codes
-            account_codes_per_dms = (
-                db.session.query(
-                    AccountCodesPerDMS.account_code_per_dms,
-                    AccountCodesPerBusiness.account_code_per_business,
-                    AccountCodesPerDMS.descriptor_per_dms,
-                    AccountCodesPerBusiness.descriptor_per_business
-                )
-                .join(AccountCodesPerBusiness, AccountCodesPerDMS.business_id == AccountCodesPerBusiness.id)
-                .filter(AccountCodesPerDMS.user_id == session['user_id'])
-                .all()
+            # Send the file to the user
+            return send_file(
+                file_path,
+                as_attachment=True,
+                download_name=os.path.basename(file_path),  # Suggest the correct file name
+                mimetype='application/zip'
             )
-
-            add_log(f"Fetched {len(account_codes_per_dms)} account codes per DMS.", log_type="general")
-
-            # Query the database for companies associated with the user
-            companies = Company.query.filter_by(user_id=user_id).all()
-
-            # Extract company names and codes into a list of dictionaries
-            data = [
-                {
-                    'company_name': company.company_name,
-                    'company_code': company.company_code
-                }
-                for company in companies
-            ]
-
-            # Create a pandas DataFrame from the data
-            companies_df = pd.DataFrame(data)
-
-            add_log(f"Fetched {len(companies_df)} companies.", log_type="general")
-
-            # Convert the query result to a DataFrame
-            account_codes_per_dms_data = [
-                {
-                    'Account Code Per DMS': code_per_dms[0],
-                    'Account Code Per Business': code_per_dms[1],
-                    'Descriptor Per DMS': code_per_dms[2],
-                    'Descriptor Per Business': code_per_dms[3]
-                } for code_per_dms in account_codes_per_dms
-            ]
-            account_codes_per_dms_df = pd.DataFrame(account_codes_per_dms_data)
-
-            # Ensure columns are integers
-            account_codes_per_dms_df['Account Code Per DMS'] = account_codes_per_dms_df['Account Code Per DMS'].astype(int)
-            account_codes_per_dms_df['Account Code Per Business'] = account_codes_per_dms_df['Account Code Per Business'].astype(int)
-
-            # Further processing (Tracking Codes, Group Codes, etc.)
-            add_log("Tracking codes and group codes processing started.", log_type="general")
-
-            tracking_codes = TrackingCode.query.filter_by(user_id=session['user_id']).with_entities(TrackingCode.tracking_code).all()
-            tracking_codes = [code[0] for code in tracking_codes if code]
-
-            group_tracking_codes = GroupTrackingCode.query.filter_by(user_id=session['user_id']).with_entities(GroupTrackingCode.group_code).all()
-            group_tracking_codes = [code[0] for code in group_tracking_codes]
-
-            group_tracking_code_mappings = GroupTrackingCode.query.filter_by(user_id=session['user_id']).options(joinedload(GroupTrackingCode.tracking_codes)).all()
-
-            group_tracking_code_map = {}
-            for group in group_tracking_code_mappings:
-                group_code = group.group_code
-                tracking_codes_associated = [tc.tracking_code for tc in group.tracking_codes]
-                group_tracking_code_map[group_code] = tracking_codes_associated
+        else:
+            task_status.status = 'failed'
+            task_status.result = "File not found"
+            db.session.commit()
+            return jsonify({"status": "error", "message": "File not found"}), 404
+    elif task_result.state == 'FAILURE':
+        task_status.status = 'failed'
+        task_status.result = str(task_result.result)
+        db.session.commit()
+        return jsonify({"status": "error", "message": f"Task failed: {task_status.result}"}), 500
+    elif task_result.state == 'PENDING':
+        return jsonify({"status": "pending", "message": "Task is still processing"}), 202
+    else:
+        return jsonify({"status": "error", "message": "Unknown error occurred during task execution"}), 500
 
 
-            # Process each row of modified_df
-            processed_rows = []
-            for _, row in modified_df.iterrows():
-                tracking_code = row['Tracking Code']
-                net_value = row['Net']
-                if tracking_code in tracking_codes:
-                    company_code = tracking_code.split(' -')[0]
-                    row['Company Code'] = company_code
-                    processed_rows.append(row)
-                elif tracking_code in group_tracking_codes:
-                    assigned_codes = group_tracking_code_map[tracking_code]
-                    num_assigned_codes = len(assigned_codes)
-                    divided_net_value = round(net_value / num_assigned_codes, 2)
-                    total_rounded_value = divided_net_value * (num_assigned_codes - 1)
-                    remainder = round(net_value - total_rounded_value, 2)
-                    for i, code in enumerate(assigned_codes):
-                        new_row = row.copy()
-                        if i == num_assigned_codes - 1:
-                            new_row['Net'] = remainder
-                        else:
-                            new_row['Net'] = divided_net_value
-                        new_row['Tracking Code'] = code
-                        company_code = code.split(' -')[0]
-                        new_row['Company Code'] = company_code
-                        new_row['Description'] = f"{new_row['Description']} - Total Invoice Amount = {net_value}, Tracking Code = {tracking_code}"
-                        processed_rows.append(new_row)
-                else:
-                    add_log(f"Error: Tracking code {tracking_code} not found in any tracking codes.", log_type="error")
-                    return jsonify({"status": "error", "message": f"Tracking code {tracking_code} not found in any tracking codes."}), 400
+@recharging_bp.route('/task-status/<task_id>', methods=['GET'])
+def get_task_status(task_id):
+    task_status = TaskStatus.query.filter_by(task_id=task_id).first()
+    if not task_status:
+        return jsonify({"status": "no_task", "message": "No task found."})
+    return jsonify({"status": task_status.status, "result": task_status.result or "No result available."})
 
-            add_log(f"Processed {len(processed_rows)} rows of tracking data.", log_type="general")
 
-            final_df = pd.DataFrame(processed_rows)
+@recharging_bp.route('/current-task-status/<task_type>', methods=['GET'])
+def get_current_task_status(task_type):
+    user_id = session.get('user_id')
 
-            # Match account codes with business codes
-            for index, row in final_df.iterrows():
-                account_code = row['Account Code']
-                matching_row = account_codes_per_dms_df[account_codes_per_dms_df['Account Code Per DMS'] == account_code]
-                if matching_row.empty:
-                    add_log(f"No matching account code per business found for {account_code}.", log_type="error")
-                    return jsonify({"status": "error", "message":f"No matching account code per business found for {account_code}"}), 400
-                else:
-                    account_code_per_business = matching_row.iloc[0]['Account Code Per Business']
-                    descriptor_per_business = matching_row.iloc[0]['Descriptor Per Business']
-                    final_df.at[index, 'Account Code Per Business'] = account_code_per_business
-                    final_df.at[index, 'Account Code Per Business Description'] = descriptor_per_business
+    # Get the latest task that is still running or recently finished
+    task_status = (
+        TaskStatus.query
+        .filter_by(user_id=user_id, task_type=task_type)
+        .filter(TaskStatus.status.in_(['in_progress', 'completed', 'failed']))
+        .order_by(TaskStatus.created_at.desc())
+        .first()
+    )
 
-            add_log("Account codes matched successfully.", log_type="general")
+    if not task_status:
+        return jsonify({"status": "no_task", "message": "No task is currently running."})
 
-            # Generate final files, zip them, and return to the user
-            add_log("Generating invoices and zipping them.", log_type="general")
+    return jsonify({
+        "status": task_status.status,
+        "task_id": task_status.task_id,
+        "result": task_status.result or "No result available."
+    })
+
+
+# # Route to handle the 'run macros' functionality (now recharging process)
+# @recharging_bp.route('/run', methods=['POST'])
+# @user_login_required
+# def run_recharging():
+#     if request.method == 'POST': 
+#         try:
+#             user_id = session.get('user_id')
+#             user = User.query.get(user_id)
+#             current_company = user.company_name
+#             current_username = user.username
+#             # Log when the process starts
+#             add_log("Processing Macro button pressed", log_type="general")
+
+#             selected_month = int(request.form['selected_month'])
+#             selected_year = int(request.form['selected_year'])
+#             lastInvoiceNumber = int(request.form['last_invoice_number']) + 1  # Now automatically 
+#             #lastInvoiceNumber = manual set
+
+#             selected_month_str = f"{selected_year}-{selected_month:02d}"
+#             selected_month_year_str_filenames = f"{datetime(1900, selected_month, 1).strftime('%B')} {selected_year}"
+
+#             add_log(f"Selected month: {selected_month_str}", log_type="general")
+
+#             # Query the database for account transactions for the logged-in user
+#             transactions = AccountTransaction.query.filter_by(user_id=session['user_id']).all()
+            
+
+#             # Example of handling an error case
+#             if not transactions:
+#                 add_log("No data found for the current user.", log_type="error")
+#                 return jsonify({"status": "error", "message":"No data found for the current user. Please check the logs."}), 400
+
+#             add_log(f"Found {len(transactions)} transactions for the user.", log_type="general")
+
+#             # Convert the transaction records to a pandas DataFrame
+#             transaction_data = [
+#                 {
+#                     'Date': t.date,
+#                     'Source': t.source,
+#                     'Contact': t.contact,
+#                     'Description': t.description,
+#                     'Reference': t.reference,
+#                     'Debit': t.debit,
+#                     'Credit': t.credit,
+#                     'Gross': t.gross,
+#                     'Net': t.net,
+#                     'VAT': t.vat,
+#                     'Account Code': t.account_code,
+#                     'Account': t.account,
+#                     'tracking_group1': t.tracking_group1,
+#                     'tracking_group2': t.tracking_group2
+#                 } for t in transactions
+#             ]
+#             df_unfiltered = pd.DataFrame(transaction_data)
+
+#             # Calculate the sum of the 'Net' column
+#             net_sum = df_unfiltered['Net'].sum()
+
+#             # Print the sum of the 'Net' column
+#             print(f"Sum of 'Net' column: {net_sum}")
+
+#             if df_unfiltered.empty:
+#                 add_log("No data found in DataFrame after converting transactions.", log_type="error")
+#                 return jsonify({"status": "error", "message": "No data found in data.csv."}), 400
+
+#             # Filter by the selected month and year
+
+#             # Step 1: Try to parse the 'Date' with the first format ('%Y-%m-%d')
+#             df_unfiltered['Date'] = pd.to_datetime(df_unfiltered['Date'], format='%Y-%m-%d', errors='coerce')
+
+#             # Step 2: For rows where the 'Date' is NaT (failed to parse), try the second format ('%d %b %Y')
+#             df_unfiltered['Date'] = df_unfiltered['Date'].fillna(pd.to_datetime(df_unfiltered['Date'], format='%d %b %Y', errors='coerce'))
+            
+
+#             df  = df_unfiltered[(df_unfiltered['Date'].dt.month == selected_month) &
+#                                         (df_unfiltered['Date'].dt.year == selected_year)]
+
+
+#             if df.empty:
+#                 add_log(f"No transactions found for {selected_month_str}.", log_type="error")
+#                 return jsonify({"status": "error", "message": f"No transactions found for {selected_month_str}."}), 400
+#             else:
+#                 add_log(f"Found {len(df)} transactions for {selected_month_str}.", log_type="general")
+
+
+#             # Further processing with logs
+#             modified_df = combine_last_two_columns(df)
+#             columns_to_drop = ['Debit', 'Credit', 'Gross', 'VAT']
+#             modified_df = modified_df.drop(columns=columns_to_drop, errors='ignore')
+#             modified_df['Account Code Per Business'] = ''
+#             modified_df['Account Code Per Business Description'] = ''
+#             modified_df['Net'] = modified_df['Net'].astype(float)
+
+#             add_log("DataFrame modified successfully. Dropped unnecessary columns and added business account codes.", log_type="general")
+
+#             # Get all account codes per DMS and map them to business account codes
+#             account_codes_per_dms = (
+#                 db.session.query(
+#                     AccountCodesPerDMS.account_code_per_dms,
+#                     AccountCodesPerBusiness.account_code_per_business,
+#                     AccountCodesPerDMS.descriptor_per_dms,
+#                     AccountCodesPerBusiness.descriptor_per_business
+#                 )
+#                 .join(AccountCodesPerBusiness, AccountCodesPerDMS.business_id == AccountCodesPerBusiness.id)
+#                 .filter(AccountCodesPerDMS.user_id == session['user_id'])
+#                 .all()
+#             )
+
+#             add_log(f"Fetched {len(account_codes_per_dms)} account codes per DMS.", log_type="general")
+
+#             # Query the database for companies associated with the user
+#             companies = Company.query.filter_by(user_id=user_id).all()
+
+#             # Extract company names and codes into a list of dictionaries
+#             data = [
+#                 {
+#                     'company_name': company.company_name,
+#                     'company_code': company.company_code
+#                 }
+#                 for company in companies
+#             ]
+
+#             # Create a pandas DataFrame from the data
+#             companies_df = pd.DataFrame(data)
+
+#             add_log(f"Fetched {len(companies_df)} companies.", log_type="general")
+
+#             # Convert the query result to a DataFrame
+#             account_codes_per_dms_data = [
+#                 {
+#                     'Account Code Per DMS': code_per_dms[0],
+#                     'Account Code Per Business': code_per_dms[1],
+#                     'Descriptor Per DMS': code_per_dms[2],
+#                     'Descriptor Per Business': code_per_dms[3]
+#                 } for code_per_dms in account_codes_per_dms
+#             ]
+#             account_codes_per_dms_df = pd.DataFrame(account_codes_per_dms_data)
+
+#             # Ensure columns are integers
+#             account_codes_per_dms_df['Account Code Per DMS'] = account_codes_per_dms_df['Account Code Per DMS'].astype(int)
+#             account_codes_per_dms_df['Account Code Per Business'] = account_codes_per_dms_df['Account Code Per Business'].astype(int)
+
+#             # Further processing (Tracking Codes, Group Codes, etc.)
+#             add_log("Tracking codes and group codes processing started.", log_type="general")
+
+#             tracking_codes = TrackingCode.query.filter_by(user_id=session['user_id']).with_entities(TrackingCode.tracking_code).all()
+#             tracking_codes = [code[0] for code in tracking_codes if code]
+
+#             group_tracking_codes = GroupTrackingCode.query.filter_by(user_id=session['user_id']).with_entities(GroupTrackingCode.group_code).all()
+#             group_tracking_codes = [code[0] for code in group_tracking_codes]
+
+#             group_tracking_code_mappings = GroupTrackingCode.query.filter_by(user_id=session['user_id']).options(joinedload(GroupTrackingCode.tracking_codes)).all()
+
+#             group_tracking_code_map = {}
+#             for group in group_tracking_code_mappings:
+#                 group_code = group.group_code
+#                 tracking_codes_associated = [tc.tracking_code for tc in group.tracking_codes]
+#                 group_tracking_code_map[group_code] = tracking_codes_associated
+
+
+#             # Process each row of modified_df
+#             processed_rows = []
+#             for _, row in modified_df.iterrows():
+#                 tracking_code = row['Tracking Code']
+#                 net_value = row['Net']
+#                 if tracking_code in tracking_codes:
+#                     company_code = tracking_code.split(' -')[0]
+#                     row['Company Code'] = company_code
+#                     processed_rows.append(row)
+#                 elif tracking_code in group_tracking_codes:
+#                     assigned_codes = group_tracking_code_map[tracking_code]
+#                     num_assigned_codes = len(assigned_codes)
+#                     divided_net_value = round(net_value / num_assigned_codes, 2)
+#                     total_rounded_value = divided_net_value * (num_assigned_codes - 1)
+#                     remainder = round(net_value - total_rounded_value, 2)
+#                     for i, code in enumerate(assigned_codes):
+#                         new_row = row.copy()
+#                         if i == num_assigned_codes - 1:
+#                             new_row['Net'] = remainder
+#                         else:
+#                             new_row['Net'] = divided_net_value
+#                         new_row['Tracking Code'] = code
+#                         company_code = code.split(' -')[0]
+#                         new_row['Company Code'] = company_code
+#                         new_row['Description'] = f"{new_row['Description']} - Total Invoice Amount = {net_value}, Tracking Code = {tracking_code}"
+#                         processed_rows.append(new_row)
+#                 else:
+#                     add_log(f"Error: Tracking code {tracking_code} not found in any tracking codes.", log_type="error")
+#                     return jsonify({"status": "error", "message": f"Tracking code {tracking_code} not found in any tracking codes."}), 400
+
+#             add_log(f"Processed {len(processed_rows)} rows of tracking data.", log_type="general")
+
+#             final_df = pd.DataFrame(processed_rows)
+
+#             # Match account codes with business codes
+#             for index, row in final_df.iterrows():
+#                 account_code = row['Account Code']
+#                 matching_row = account_codes_per_dms_df[account_codes_per_dms_df['Account Code Per DMS'] == account_code]
+#                 if matching_row.empty:
+#                     add_log(f"No matching account code per business found for {account_code}.", log_type="error")
+#                     return jsonify({"status": "error", "message":f"No matching account code per business found for {account_code}"}), 400
+#                 else:
+#                     account_code_per_business = matching_row.iloc[0]['Account Code Per Business']
+#                     descriptor_per_business = matching_row.iloc[0]['Descriptor Per Business']
+#                     final_df.at[index, 'Account Code Per Business'] = account_code_per_business
+#                     final_df.at[index, 'Account Code Per Business Description'] = descriptor_per_business
+
+#             add_log("Account codes matched successfully.", log_type="general")
+
+#             # Generate final files, zip them, and return to the user
+#             add_log("Generating invoices and zipping them.", log_type="general")
 
             
 
-            # Create a new DataFrame for the sales invoice
-            sales_invoice_df = pd.DataFrame(columns=['ContactName','EmailAdress','POAddressLine1','POAddressLine2','POAddressLine3','POAddressLine4','POCity','PORegion','POPostalCode','POCountry', 'InvoiceNumber', 'Company Code', 'InvoiceDate', 'DueDate','Total','InventoryItemCode', 'Description', 'Quantiy', 'UnitAmount','Discount','AccountCode', 'TaxType'])
+#             # Create a new DataFrame for the sales invoice
+#             sales_invoice_df = pd.DataFrame(columns=['ContactName','EmailAdress','POAddressLine1','POAddressLine2','POAddressLine3','POAddressLine4','POCity','PORegion','POPostalCode','POCountry', 'InvoiceNumber', 'Company Code', 'InvoiceDate', 'DueDate','Total','InventoryItemCode', 'Description', 'Quantiy', 'UnitAmount','Discount','AccountCode', 'TaxType'])
             
-            starting_invoice_number = lastInvoiceNumber
-            row_count = 0
+#             starting_invoice_number = lastInvoiceNumber
+#             row_count = 0
 
-            # Get the current date
-            current_date = datetime.now().strftime("%Y-%m-%d")
-            current_month = datetime.now().strftime("%B")
-            current_year = datetime.now().strftime("%Y")
+#             # Get the current date
+#             current_date = datetime.now().strftime("%Y-%m-%d")
+#             current_month = datetime.now().strftime("%B")
+#             current_year = datetime.now().strftime("%Y")
 
-            # Calculate the last day of the selected month and year
-            last_day_of_month = calendar.monthrange(selected_year, selected_month)[1]
+#             # Calculate the last day of the selected month and year
+#             last_day_of_month = calendar.monthrange(selected_year, selected_month)[1]
 
-            # Create the invoice date as the last day of the selected month and year
-            invoice_date = datetime(selected_year, selected_month, last_day_of_month).strftime("%d/%m/%Y")
+#             # Create the invoice date as the last day of the selected month and year
+#             invoice_date = datetime(selected_year, selected_month, last_day_of_month).strftime("%d/%m/%Y")
 
-            selected_month_name = calendar.month_name[selected_month]
-
-
-            # Process each row in the modified DataFrame
-            for _, row in final_df.iterrows():
-                company_code = row['Company Code']
-                net_amount = row['Net']
-
-                # Find the company name from companies.csv
-                # Get the company name where the company_code matches
-                matching_company = companies_df.loc[companies_df['company_code'] == company_code, 'company_name']
-
-                # Check if there are any matches
-                if not matching_company.empty:
-                    company_name = matching_company.values[0]
-                else:
-                    company_name = None  # Set company_name to None if no match is found
-                    add_log(f"Error: No company found for company code '{company_code}'", log_type="error")
+#             selected_month_name = calendar.month_name[selected_month]
 
 
-                # Check if the company name already exists in the invoice DataFrame
-                if not sales_invoice_df[(sales_invoice_df['ContactName'] == company_name) & (sales_invoice_df['Company Code'] == company_code)].empty:
-                    # Add the net amount to the existing net amount
-                    sales_invoice_df.loc[(sales_invoice_df['ContactName'] == company_name) & (sales_invoice_df['Company Code'] == company_code), 'UnitAmount'] +=net_amount
-                else:
-                    #  Add a new row
-                    new_row = pd.DataFrame({
-                        'ContactName': [company_name],
-                        'InvoiceNumber': [str(current_username)+' - ' + str(starting_invoice_number + row_count)],
-                        'Quantity': ['1'],
-                        'TaxType':['20% (VAT on Income)'],
-                        'Description': ['HO and Management cost recharges for the month of ' + str(selected_month_name) + ' ' + str(selected_year)],
-                        'Company Code': [company_code],
-                        'InvoiceDate': [invoice_date],
-                        'DueDate': [invoice_date],
-                        'UnitAmount': [net_amount],
-                        'AccountCode': ['4000']
-                    })
-                    row_count = row_count + 1
-                    sales_invoice_df = pd.concat([sales_invoice_df, new_row], ignore_index=True)
+#             # Process each row in the modified DataFrame
+#             for _, row in final_df.iterrows():
+#                 company_code = row['Company Code']
+#                 net_amount = row['Net']
+
+#                 # Find the company name from companies.csv
+#                 # Get the company name where the company_code matches
+#                 matching_company = companies_df.loc[companies_df['company_code'] == company_code, 'company_name']
+
+#                 # Check if there are any matches
+#                 if not matching_company.empty:
+#                     company_name = matching_company.values[0]
+#                 else:
+#                     company_name = None  # Set company_name to None if no match is found
+#                     add_log(f"Error: No company found for company code '{company_code}'", log_type="error")
+
+
+#                 # Check if the company name already exists in the invoice DataFrame
+#                 if not sales_invoice_df[(sales_invoice_df['ContactName'] == company_name) & (sales_invoice_df['Company Code'] == company_code)].empty:
+#                     # Add the net amount to the existing net amount
+#                     sales_invoice_df.loc[(sales_invoice_df['ContactName'] == company_name) & (sales_invoice_df['Company Code'] == company_code), 'UnitAmount'] +=net_amount
+#                 else:
+#                     #  Add a new row
+#                     new_row = pd.DataFrame({
+#                         'ContactName': [company_name],
+#                         'InvoiceNumber': [str(current_username)+' - ' + str(starting_invoice_number + row_count)],
+#                         'Quantity': ['1'],
+#                         'TaxType':['20% (VAT on Income)'],
+#                         'Description': ['HO and Management cost recharges for the month of ' + str(selected_month_name) + ' ' + str(selected_year)],
+#                         'Company Code': [company_code],
+#                         'InvoiceDate': [invoice_date],
+#                         'DueDate': [invoice_date],
+#                         'UnitAmount': [net_amount],
+#                         'AccountCode': ['4000']
+#                     })
+#                     row_count = row_count + 1
+#                     sales_invoice_df = pd.concat([sales_invoice_df, new_row], ignore_index=True)
             
 
 
 
-            # Ensure all values in the 'Net' column are rounded to two decimal places
-            sales_invoice_df['UnitAmount'] = sales_invoice_df['UnitAmount'].round(2)
+#             # Ensure all values in the 'Net' column are rounded to two decimal places
+#             sales_invoice_df['UnitAmount'] = sales_invoice_df['UnitAmount'].round(2)
 
 
-            #st.write("Sales Invoice Data:")
-            #st.dataframe(sales_invoice_df)
+#             #st.write("Sales Invoice Data:")
+#             #st.dataframe(sales_invoice_df)
 
-            # Convert sales_invoice_df to CSV
-            csv_sales = sales_invoice_df.to_csv(index=False).encode('utf-8')
+#             # Convert sales_invoice_df to CSV
+#             csv_sales = sales_invoice_df.to_csv(index=False).encode('utf-8')
 
             
-        # Button to produce purchase invoices
-        #if st.button("Produce Purchase Invoices"):
+#         # Button to produce purchase invoices
+#         #if st.button("Produce Purchase Invoices"):
 
 
-            # Create a new DataFrame for the purchase invoice
-            purchase_invoice_df = pd.DataFrame(columns=['ContactName','EmailAddress','POAddressLine1','POAddressLine2','POAddressLine3','POAddressLine4','POCity','PORegion','POPostalCode','POCountry','InvoiceNumber', 'InvoiceDate', 'DueDate', 'Total', 'InventoryItemCode', 'Description', 'Quantity', 'UnitAmount', 'AccountCode', 'TaxType', 'TaxAmount', 'TrackingName1', 'TrackingOption1', 'TrackingName2', 'TrackingOption2', 'Currency', 'Company Code', 'Company Name'])
+#             # Create a new DataFrame for the purchase invoice
+#             purchase_invoice_df = pd.DataFrame(columns=['ContactName','EmailAddress','POAddressLine1','POAddressLine2','POAddressLine3','POAddressLine4','POCity','PORegion','POPostalCode','POCountry','InvoiceNumber', 'InvoiceDate', 'DueDate', 'Total', 'InventoryItemCode', 'Description', 'Quantity', 'UnitAmount', 'AccountCode', 'TaxType', 'TaxAmount', 'TrackingName1', 'TrackingOption1', 'TrackingName2', 'TrackingOption2', 'Currency', 'Company Code', 'Company Name'])
 
-            # Process each row in the final DataFrame
-            for _, row in final_df.iterrows():
-                company_code = row['Company Code']
-                net_amount = row['Net']
-                #tracking_code = row['Tracking Code'].split('-')[1].strip() 
-                tracking_code = '-'.join(row['Tracking Code'].split('-')[1:]).strip()
+#             # Process each row in the final DataFrame
+#             for _, row in final_df.iterrows():
+#                 company_code = row['Company Code']
+#                 net_amount = row['Net']
+#                 #tracking_code = row['Tracking Code'].split('-')[1].strip() 
+#                 tracking_code = '-'.join(row['Tracking Code'].split('-')[1:]).strip()
 
-                account_code = row['Account Code Per Business']  # Assuming 'Account Code' is a column in your DataFrame
+#                 account_code = row['Account Code Per Business']  # Assuming 'Account Code' is a column in your DataFrame
 
 
-                # Find the company name from companies.csv
-                company_name = companies_df.loc[companies_df['company_code'] == company_code, 'company_name'].values[0]
+#                 # Find the company name from companies.csv
+#                 company_name = companies_df.loc[companies_df['company_code'] == company_code, 'company_name'].values[0]
 
-                # Check if the company code and account code already exist in the purchase invoice DataFrame
-                existing_row = purchase_invoice_df[(purchase_invoice_df['Company Code'] == company_code) & (purchase_invoice_df['AccountCode'] == account_code) & (purchase_invoice_df['TrackingOption1'] == tracking_code) ]
-                if not existing_row.empty:
-                    # Add the net amount to the existing net amount
-                    purchase_invoice_df.loc[(purchase_invoice_df['Company Code'] == company_code) & (purchase_invoice_df['AccountCode'] == account_code)  & (purchase_invoice_df['TrackingOption1'] == tracking_code) , 'UnitAmount'] += net_amount
-                else:
-                    # Find the row in the sales_invoice_df with the matching company name
-                    matching_row = sales_invoice_df[sales_invoice_df['ContactName'] == company_name]
+#                 # Check if the company code and account code already exist in the purchase invoice DataFrame
+#                 existing_row = purchase_invoice_df[(purchase_invoice_df['Company Code'] == company_code) & (purchase_invoice_df['AccountCode'] == account_code) & (purchase_invoice_df['TrackingOption1'] == tracking_code) ]
+#                 if not existing_row.empty:
+#                     # Add the net amount to the existing net amount
+#                     purchase_invoice_df.loc[(purchase_invoice_df['Company Code'] == company_code) & (purchase_invoice_df['AccountCode'] == account_code)  & (purchase_invoice_df['TrackingOption1'] == tracking_code) , 'UnitAmount'] += net_amount
+#                 else:
+#                     # Find the row in the sales_invoice_df with the matching company name
+#                     matching_row = sales_invoice_df[sales_invoice_df['ContactName'] == company_name]
 
-                    # Retrieve the invoice number from the matching row
-                    if not matching_row.empty:
-                        invoice_number = matching_row.iloc[0]['InvoiceNumber']
-                    else:
-                        invoice_number = None  # or handle the case where no match is found
+#                     # Retrieve the invoice number from the matching row
+#                     if not matching_row.empty:
+#                         invoice_number = matching_row.iloc[0]['InvoiceNumber']
+#                     else:
+#                         invoice_number = None  # or handle the case where no match is found
                         
                     
-                    # Add a new row
-                    new_row = pd.DataFrame({
-                        'ContactName': [current_company],
-                        'InvoiceDate': [invoice_date],
-                        'DueDate': [invoice_date],
-                        'Quantity': ['1'],
-                        'TaxType':['20% (VAT on Expenses)'],
-                        'TrackingName1': ['Store'],
-                        'InvoiceNumber': [invoice_number],
-                        'Description': ['HO and Management cost recharges for the month of ' + str(selected_month_name) + ' ' + str(selected_year)],
-                        'TrackingOption1': [tracking_code],
-                        'Company Name': [company_name],
-                        'Company Code': [company_code],
-                        'AccountCode': [account_code],
-                        'UnitAmount': [net_amount]
-                    })
-                    purchase_invoice_df = pd.concat([purchase_invoice_df, new_row], ignore_index=True)
+#                     # Add a new row
+#                     new_row = pd.DataFrame({
+#                         'ContactName': [current_company],
+#                         'InvoiceDate': [invoice_date],
+#                         'DueDate': [invoice_date],
+#                         'Quantity': ['1'],
+#                         'TaxType':['20% (VAT on Expenses)'],
+#                         'TrackingName1': ['Store'],
+#                         'InvoiceNumber': [invoice_number],
+#                         'Description': ['HO and Management cost recharges for the month of ' + str(selected_month_name) + ' ' + str(selected_year)],
+#                         'TrackingOption1': [tracking_code],
+#                         'Company Name': [company_name],
+#                         'Company Code': [company_code],
+#                         'AccountCode': [account_code],
+#                         'UnitAmount': [net_amount]
+#                     })
+#                     purchase_invoice_df = pd.concat([purchase_invoice_df, new_row], ignore_index=True)
                 
 
-            # Ensure all values in the 'Net' column are rounded to two decimal places
-            purchase_invoice_df['UnitAmount'] = purchase_invoice_df['UnitAmount'].round(2)
+#             # Ensure all values in the 'Net' column are rounded to two decimal places
+#             purchase_invoice_df['UnitAmount'] = purchase_invoice_df['UnitAmount'].round(2)
 
 
-            #st.write("Purchase Invoice Data:")
-            #st.dataframe(purchase_invoice_df)
-            # Create directories if they don't exist
-            # 1. Create purchase_invoices.zip in memory
-            purchase_invoices_zip_stream = BytesIO()
-            with zipfile.ZipFile(purchase_invoices_zip_stream, 'w', zipfile.ZIP_DEFLATED) as purchase_zip:
-                for company in purchase_invoice_df['Company Name'].unique():
-                    company_df = purchase_invoice_df[purchase_invoice_df['Company Name'] == company]
-                    # Get the invoice number from the first row of the company data
-                    invoice_number = company_df.iloc[0]['InvoiceNumber']
-                    # Add the invoice number at the beginning of the filename
-                    company_filename = f"{invoice_number}-{company}-{selected_month_year_str_filenames}.csv"
-                    csv_content = company_df.to_csv(index=False)
-                    purchase_zip.writestr(company_filename, csv_content)
-            purchase_invoices_zip_stream.seek(0)
-            zip_data1 = purchase_invoices_zip_stream.read()
+#             #st.write("Purchase Invoice Data:")
+#             #st.dataframe(purchase_invoice_df)
+#             # Create directories if they don't exist
+#             # 1. Create purchase_invoices.zip in memory
+#             purchase_invoices_zip_stream = BytesIO()
+#             with zipfile.ZipFile(purchase_invoices_zip_stream, 'w', zipfile.ZIP_DEFLATED) as purchase_zip:
+#                 for company in purchase_invoice_df['Company Name'].unique():
+#                     company_df = purchase_invoice_df[purchase_invoice_df['Company Name'] == company]
+#                     # Get the invoice number from the first row of the company data
+#                     invoice_number = company_df.iloc[0]['InvoiceNumber']
+#                     # Add the invoice number at the beginning of the filename
+#                     company_filename = f"{invoice_number}-{company}-{selected_month_year_str_filenames}.csv"
+#                     csv_content = company_df.to_csv(index=False)
+#                     purchase_zip.writestr(company_filename, csv_content)
+#             purchase_invoices_zip_stream.seek(0)
+#             zip_data1 = purchase_invoices_zip_stream.read()
 
-            # 2. Create breakdown_invoices.zip in memory
-            breakdown_invoices_zip_stream = BytesIO()
-            with zipfile.ZipFile(breakdown_invoices_zip_stream, 'w', zipfile.ZIP_DEFLATED) as breakdown_zip:
-                for company_code in final_df['Company Code'].unique():
-                    # Filter the dataframe for the current company
-                    company_df = final_df[final_df['Company Code'] == company_code]
+#             # 2. Create breakdown_invoices.zip in memory
+#             breakdown_invoices_zip_stream = BytesIO()
+#             with zipfile.ZipFile(breakdown_invoices_zip_stream, 'w', zipfile.ZIP_DEFLATED) as breakdown_zip:
+#                 for company_code in final_df['Company Code'].unique():
+#                     # Filter the dataframe for the current company
+#                     company_df = final_df[final_df['Company Code'] == company_code]
                     
-                    # Get the company name where the company_code matches
-                    matching_company_name = companies_df.loc[companies_df['company_code'] == company_code, 'company_name'].values
+#                     # Get the company name where the company_code matches
+#                     matching_company_name = companies_df.loc[companies_df['company_code'] == company_code, 'company_name'].values
 
-                    # Check if matching_company_name is not empty and extract the first value
-                    if len(matching_company_name) > 0:
-                        company_name_str = matching_company_name[0]
-                    else:
-                        company_name_str = "Unknown Company"
+#                     # Check if matching_company_name is not empty and extract the first value
+#                     if len(matching_company_name) > 0:
+#                         company_name_str = matching_company_name[0]
+#                     else:
+#                         company_name_str = "Unknown Company"
 
-                    # Sort the transactions by 'Account Code per Business'
-                    company_df_sorted = company_df.sort_values(by='Account Code Per Business')
+#                     # Sort the transactions by 'Account Code per Business'
+#                     company_df_sorted = company_df.sort_values(by='Account Code Per Business')
 
-                    # Initialize an empty DataFrame for breakdown with totals
-                    breakdown_with_totals = pd.DataFrame()
+#                     # Initialize an empty DataFrame for breakdown with totals
+#                     breakdown_with_totals = pd.DataFrame()
 
-                    # Loop through each 'Account Code per Business' and group data
-                    for code, group in company_df_sorted.groupby('Account Code Per Business'):
+#                     # Loop through each 'Account Code per Business' and group data
+#                     for code, group in company_df_sorted.groupby('Account Code Per Business'):
                         
-                        # Sort each group by 'Net' in descending order
-                        group = group.sort_values(by='Net', ascending=False)
+#                         # Sort each group by 'Net' in descending order
+#                         group = group.sort_values(by='Net', ascending=False)
             
-                        # Calculate the total for 'Net' column, rounded to 2 decimal places
-                        total_net = round(group['Net'].sum(), 2)
+#                         # Calculate the total for 'Net' column, rounded to 2 decimal places
+#                         total_net = round(group['Net'].sum(), 2)
 
-                        # Add a 'Total Net' column, setting the total value only on the last row of the group
-                        group['Total Net'] = [None] * (len(group) - 1) + [total_net]
+#                         # Add a 'Total Net' column, setting the total value only on the last row of the group
+#                         group['Total Net'] = [None] * (len(group) - 1) + [total_net]
 
-                        # Concatenate the group with breakdown_with_totals
-                        breakdown_with_totals = pd.concat([breakdown_with_totals, group], ignore_index=True)
+#                         # Concatenate the group with breakdown_with_totals
+#                         breakdown_with_totals = pd.concat([breakdown_with_totals, group], ignore_index=True)
 
-                        # Add an empty row for separation between different account codes
-                        empty_row = pd.Series([None] * len(breakdown_with_totals.columns), index=breakdown_with_totals.columns)
-                        breakdown_with_totals = pd.concat([breakdown_with_totals, pd.DataFrame([empty_row])], ignore_index=True)
+#                         # Add an empty row for separation between different account codes
+#                         empty_row = pd.Series([None] * len(breakdown_with_totals.columns), index=breakdown_with_totals.columns)
+#                         breakdown_with_totals = pd.concat([breakdown_with_totals, pd.DataFrame([empty_row])], ignore_index=True)
 
-                    # Check and print the column names for debugging
-                    print("Columns after grouping and processing:", breakdown_with_totals.columns)
+#                     # Check and print the column names for debugging
+#                     print("Columns after grouping and processing:", breakdown_with_totals.columns)
 
-                    # Ensure 'Total Net' is one of the columns
-                    if 'Total Net' in breakdown_with_totals.columns and 'Account Code Per Business' in breakdown_with_totals.columns:
-                        # Create a summary table for account codes and their totals (Net column only)
-                        summary_df = breakdown_with_totals[['Account Code Per Business', 'Total Net']].dropna(subset=['Total Net']).reset_index(drop=True)
-                    else:
-                        # If the columns are not present, raise an error
-                        raise ValueError("Required columns 'Account Code Per Business' or 'Total Net' are missing from the DataFrame")
+#                     # Ensure 'Total Net' is one of the columns
+#                     if 'Total Net' in breakdown_with_totals.columns and 'Account Code Per Business' in breakdown_with_totals.columns:
+#                         # Create a summary table for account codes and their totals (Net column only)
+#                         summary_df = breakdown_with_totals[['Account Code Per Business', 'Total Net']].dropna(subset=['Total Net']).reset_index(drop=True)
+#                     else:
+#                         # If the columns are not present, raise an error
+#                         raise ValueError("Required columns 'Account Code Per Business' or 'Total Net' are missing from the DataFrame")
 
-                    # Align the lengths of both DataFrames for concatenation
-                    max_len = max(len(breakdown_with_totals), len(summary_df))
-                    breakdown_with_totals.reset_index(drop=True, inplace=True)
-                    summary_df.reset_index(drop=True, inplace=True)
+#                     # Align the lengths of both DataFrames for concatenation
+#                     max_len = max(len(breakdown_with_totals), len(summary_df))
+#                     breakdown_with_totals.reset_index(drop=True, inplace=True)
+#                     summary_df.reset_index(drop=True, inplace=True)
 
-                    # Align lengths for concatenation
-                    breakdown_with_totals = pd.concat([breakdown_with_totals, pd.DataFrame(index=range(max_len))], axis=1)
-                    summary_df = pd.concat([summary_df, pd.DataFrame(index=range(max_len))], axis=1)
+#                     # Align lengths for concatenation
+#                     breakdown_with_totals = pd.concat([breakdown_with_totals, pd.DataFrame(index=range(max_len))], axis=1)
+#                     summary_df = pd.concat([summary_df, pd.DataFrame(index=range(max_len))], axis=1)
 
-                    # Concatenate the breakdown with totals and the summary table side by side
-                    final_company_df = pd.concat([breakdown_with_totals, summary_df], axis=1)
+#                     # Concatenate the breakdown with totals and the summary table side by side
+#                     final_company_df = pd.concat([breakdown_with_totals, summary_df], axis=1)
 
-                    # Create the filename using the company name and code
-                    company_filename = f"Breakdown for {company_name_str} ({company_code}) - {selected_month_year_str_filenames}.csv"
+#                     # Create the filename using the company name and code
+#                     company_filename = f"Breakdown for {company_name_str} ({company_code}) - {selected_month_year_str_filenames}.csv"
 
-                    # Write the CSV content to a string
-                    csv_content = final_company_df.to_csv(index=False)
+#                     # Write the CSV content to a string
+#                     csv_content = final_company_df.to_csv(index=False)
 
-                    # Write this string to the zip file
-                    breakdown_zip.writestr(company_filename, csv_content)
+#                     # Write this string to the zip file
+#                     breakdown_zip.writestr(company_filename, csv_content)
 
-            breakdown_invoices_zip_stream.seek(0)
-            zip_data2 = breakdown_invoices_zip_stream.read()
+#             breakdown_invoices_zip_stream.seek(0)
+#             zip_data2 = breakdown_invoices_zip_stream.read()
 
-            # Convert company and tracking codes to strings
-            final_df['Company Code'] = final_df['Company Code'].astype(str)
-            final_df['Account Code Per Business'] = final_df['Account Code Per Business'].astype(str)
-            final_df['Tracking Code'] = final_df['Tracking Code'].astype(str)
-            final_df['Account Code'] = final_df['Account Code'].astype(str)
+#             # Convert company and tracking codes to strings
+#             final_df['Company Code'] = final_df['Company Code'].astype(str)
+#             final_df['Account Code Per Business'] = final_df['Account Code Per Business'].astype(str)
+#             final_df['Tracking Code'] = final_df['Tracking Code'].astype(str)
+#             final_df['Account Code'] = final_df['Account Code'].astype(str)
 
-            # Join final_df with companies_df to include company names
-            final_df = final_df.merge(companies_df, left_on='Company Code', right_on='company_code', how='left')
-            final_df.drop(columns=['company_code'], inplace=True)
+#             # Join final_df with companies_df to include company names
+#             final_df = final_df.merge(companies_df, left_on='Company Code', right_on='company_code', how='left')
+#             final_df.drop(columns=['company_code'], inplace=True)
 
-            # Prepare the data for Full Data Breakdown using 'Account Code with Descriptor' column
-            final_df['Account Code with Descriptor'] = final_df['Account Code Per Business'] + ' - ' + final_df['Account Code Per Business Description']
+#             # Prepare the data for Full Data Breakdown using 'Account Code with Descriptor' column
+#             final_df['Account Code with Descriptor'] = final_df['Account Code Per Business'] + ' - ' + final_df['Account Code Per Business Description']
 
-            # Load the Excel template
-            template_path = '/Users/nyalpatel/Desktop/XeroAutomationWebApp/Recharging_Report_Template.xlsx'  # Replace this with the actual path to your template
-            workbook = load_workbook(template_path)
+#             # Load the Excel template
+#             template_path = '/Users/nyalpatel/Desktop/XeroAutomationWebApp/Recharging_Report_Template.xlsx'  # Replace this with the actual path to your template
+#             workbook = load_workbook(template_path)
             
-            # Select the "Full Data Breakdown" sheet
-            sheet = workbook['Full Data Breakdown']  # Ensure the sheet name matches exactly
+#             # Select the "Full Data Breakdown" sheet
+#             sheet = workbook['Full Data Breakdown']  # Ensure the sheet name matches exactly
 
-            # Write final_df data to the "Full Data Breakdown" sheet, starting from cell A3
-            for row_idx, row in final_df.iterrows():
-                for col_idx, value in enumerate(row):
-                    sheet.cell(row=row_idx + 4, column=col_idx + 1, value=value)  # Start writing at A3
+#             # Write final_df data to the "Full Data Breakdown" sheet, starting from cell A3
+#             for row_idx, row in final_df.iterrows():
+#                 for col_idx, value in enumerate(row):
+#                     sheet.cell(row=row_idx + 4, column=col_idx + 1, value=value)  # Start writing at A3
 
-            # Save the modified workbook to a BytesIO stream
-            excel_stream = BytesIO()
-            workbook.save(excel_stream)
-            excel_stream.seek(0)  # Reset stream position
-
-
+#             # Save the modified workbook to a BytesIO stream
+#             excel_stream = BytesIO()
+#             workbook.save(excel_stream)
+#             excel_stream.seek(0)  # Reset stream position
 
 
-            # 3. Create combined_invoices.zip in memory
-            combined_zip_stream = BytesIO()
-            with zipfile.ZipFile(combined_zip_stream, 'w', zipfile.ZIP_DEFLATED) as combined_zip:
-                # Add sales_invoice CSV
-                sales_invoice_csv_filename = f"sales_invoice_for_{selected_month_year_str_filenames}.csv"
-                combined_zip.writestr(sales_invoice_csv_filename, sales_invoice_df.to_csv(index=False))
+
+
+#             # 3. Create combined_invoices.zip in memory
+#             combined_zip_stream = BytesIO()
+#             with zipfile.ZipFile(combined_zip_stream, 'w', zipfile.ZIP_DEFLATED) as combined_zip:
+#                 # Add sales_invoice CSV
+#                 sales_invoice_csv_filename = f"sales_invoice_for_{selected_month_year_str_filenames}.csv"
+#                 combined_zip.writestr(sales_invoice_csv_filename, sales_invoice_df.to_csv(index=False))
                 
-                # Add purchase_invoices.zip
-                combined_zip.writestr('purchase_invoices.zip', zip_data1)
+#                 # Add purchase_invoices.zip
+#                 combined_zip.writestr('purchase_invoices.zip', zip_data1)
                 
-                # Add breakdown_invoices.zip
-                combined_zip.writestr('breakdown_invoices.zip', zip_data2)
+#                 # Add breakdown_invoices.zip
+#                 combined_zip.writestr('breakdown_invoices.zip', zip_data2)
 
-                # Add the Excel report to the ZIP
-                combined_zip.writestr('store_company_report.xlsx', excel_stream.read())
+#                 # Add the Excel report to the ZIP
+#                 combined_zip.writestr('store_company_report.xlsx', excel_stream.read())
             
-            combined_zip_stream.seek(0)
+#             combined_zip_stream.seek(0)
 
-            # Store the CSV content or ZIP data in the session after the macro is run
-            session['purchase_csv'] = purchase_invoice_df.to_csv(index=False)
-            session['breakdown_csv'] = final_df.to_csv(index=False)
-            session['sales_invoice_csv'] = sales_invoice_df.to_csv(index=False)
+#             # Store the CSV content or ZIP data in the session after the macro is run
+#             session['purchase_csv'] = purchase_invoice_df.to_csv(index=False)
+#             session['breakdown_csv'] = final_df.to_csv(index=False)
+#             session['sales_invoice_csv'] = sales_invoice_df.to_csv(index=False)
 
   
 
 
-            # Send the combined ZIP file
-            return send_file(
-                combined_zip_stream,
-                mimetype='application/zip',
-                as_attachment=True,
-                download_name='combined_invoices.zip'
-            )
+#             # Send the combined ZIP file
+#             return send_file(
+#                 combined_zip_stream,
+#                 mimetype='application/zip',
+#                 as_attachment=True,
+#                 download_name='combined_invoices.zip'
+#             )
         
-        except Exception as e:
-            add_log(f"Error occurred: {str(e)}", log_type="error")
-            return jsonify({"success": False, "message": "Processing failed. Please check the error log."}), 500
+#         except Exception as e:
+#             add_log(f"Error occurred: {str(e)}", log_type="error")
+#             return jsonify({"success": False, "message": "Processing failed. Please check the error log."}), 500
 
 
 # @recharging_bp.route('/upload_to_xero', methods=['POST'])
@@ -879,13 +987,13 @@ def download_log_csv(task_id):
 
 
 
-@recharging_bp.route('/download/<filename>', methods=['GET'])
-@user_login_required
-def download_file(filename):
-    try:
-        return send_file(filename, mimetype='application/zip', as_attachment=True, download_name=filename)
-    except Exception as e:
-        return jsonify({"success": False, "message": f"Error while downloading file: {str(e)}"}), 500
+# @recharging_bp.route('/download/<filename>', methods=['GET'])
+# @user_login_required
+# def download_file(filename):
+#     try:
+#         return send_file(filename, mimetype='application/zip', as_attachment=True, download_name=filename)
+#     except Exception as e:
+#         return jsonify({"success": False, "message": f"Error while downloading file: {str(e)}"}), 500
     
 
 

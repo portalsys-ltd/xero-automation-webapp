@@ -125,12 +125,44 @@ $(document).ready(function() {
     // Disable the process button initially
     $('#process-button').prop('disabled', true);
 
-    // Fetch the last invoice number when the page loads
-    fetchLastInvoiceNumber();
-
     // When the selected month or year changes or is clicked
     $('#selected_month, #selected_year').on('change click', function() {
         fetchLastInvoiceNumber();
+    });
+
+    // On page load, check if a task is already running
+    $.ajax({
+        url: '/recharging/current-task-status/recharging', // Adjust endpoint as needed
+        type: 'GET',
+        success: function(response) {
+            if (response.status === 'in_progress') {
+                console.log("Resuming task polling for task ID:", response.task_id);
+                pollTaskStatus(response.task_id); // Resume polling for this task
+                updateTaskStatusUI(true);
+
+            } else if (response.status === 'completed') {
+                console.log("Previous task completed.");
+                updateTaskStatusUI(false);
+                $('#last_invoice_number_display').text('Previous task completed. Ready for new task.');
+                // Fetch the last invoice number when the page loads
+         
+
+            } else if (response.status === 'failed') {
+                console.log("Previous task failed.");
+                updateTaskStatusUI(false);
+                alert(`Task failed: ${response.result}`);
+    
+
+            } else {
+                console.log("No task is currently running.");
+                updateTaskStatusUI(false);
+    
+            }
+        },
+        error: function() {
+            console.error("Error checking current task status.");
+            updateTaskStatusUI(false);
+        }
     });
 
     function fetchLastInvoiceNumber() {
@@ -152,7 +184,6 @@ $(document).ready(function() {
                         // Update the display with the last invoice number and enable the process button
                         $('#last_invoice_number_display').text('Last Invoice Number: ' + response.last_invoice_number);
                         $('#last_invoice_number').val(response.last_invoice_number);
-                        $('#process-button').prop('disabled', false); // Enable button
                     } else if (response.status === 'error') {
                         // Display the error message and disable the process button
                         $('#last_invoice_number_display').text('Error: ' + response.message);
@@ -167,76 +198,137 @@ $(document).ready(function() {
         }
     }
 
-    $('#run-recharging-form').on('submit', function(event) {
-        event.preventDefault(); // Prevent default form submission
+    function checkTaskStatus() {
+        return $.ajax({
+            url: '/recharging/task-status/recharging',
+            type: 'GET',
+            success: function (response) {
+                if (response.status === 'completed') {
+                    console.log("Task completed. Updating UI.");
+                    updateTaskStatusUI(false);
+                    $('#last_invoice_number_display').text('Processing complete. File has been downloaded.');
+                } else if (response.status === 'in_progress') {
+                    console.log("Task still in progress.");
+                    updateTaskStatusUI(true);
+                } else if (response.status === 'failed') {
+                    console.log("Task failed: ", response.result);
+                    alert(`Task failed: ${response.result}`);
+                    updateTaskStatusUI(false);
+                } else {
+                    console.error("Unknown status received: ", response.status);
+                    updateTaskStatusUI(false);
+                }
+            },
+            error: function () {
+                console.error("Error checking task status.");
+                updateTaskStatusUI(false);
+            }
+        });
+    }
 
-        // Disable the process button and show the loading spinner
-        $('#process-button').prop('disabled', true);
+
+    function updateTaskStatusUI(isProcessing) {
+    if (isProcessing) {
+        $('#process-button').prop('disabled', true).text('Processing...');
         $('#loading-spinner').show();
+        $('#last_invoice_number_display').text('Task is already running. Please wait.');
+    } else {
+        $('#process-button').prop('disabled', false).text('Process Data');
+        $('#loading-spinner').hide();
+        $('#last_invoice_number_display').text('Ready to start processing.');
+    }
+}
 
-        // Show the loading spinner
-        $('#loading-spinner').show();
+    $('#run-recharging-form').on('submit', function (event) {
+        event.preventDefault();
 
+        // Start a new task
         $.ajax({
             url: '{{ url_for("recharging.run_recharging") }}',
             type: 'POST',
-            data: $(this).serialize(), // Ensure form data is sent correctly
-            xhrFields: {
-                responseType: 'blob' // Expect binary data (ZIP file)
-            },
-            success: function(blob, status, xhr) {
-                $('#loading-spinner').hide();
-
-                var contentType = xhr.getResponseHeader('Content-Type');
-                if (contentType === 'application/zip') {
-                    // Handle the success response (downloading the ZIP file)
-                    var filename = "";
-                    var disposition = xhr.getResponseHeader('Content-Disposition');
-                    if (disposition && disposition.indexOf('attachment') !== -1) {
-                        var filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
-                        var matches = filenameRegex.exec(disposition);
-                        if (matches != null && matches[1]) filename = matches[1].replace(/['"]/g, '');
-                    }
-
-                    var downloadUrl = window.URL.createObjectURL(blob);
-
-                    if (filename) {
-                        var a = document.createElement("a");
-                        a.href = downloadUrl;
-                        a.download = filename;
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                    } else {
-                        window.location = downloadUrl;
-                    }
-
-                    setTimeout(function() { window.URL.revokeObjectURL(downloadUrl); }, 100);
-                    alert("Download started successfully.");
+            data: $(this).serialize(),
+            success: function (response) {
+                if (response.status === 'success') {
+                    const taskId = response.task_id; // Capture the task ID
+                    pollTaskStatus(taskId); // Start polling for this specific task
+                    updateTaskStatusUI(true);
                 } else {
-                    alert("Unexpected content type received.");
+                    alert(response.message);
+                    updateTaskStatusUI(false);
                 }
             },
-                
-            error: function(xhr, status, error) {
-                $('#loading-spinner').hide();
-
-                // Check if the response contains a JSON error message
-                try {
-                    var response = JSON.parse(xhr.responseText);
-
-                    if (response.status === 'error') {
-                        // Display a user-friendly error message as a popup
-                        alert(response.message);
-                    } else {
-                        alert("An unexpected error occurred.");
-                    }
-                } catch (e) {
-                    alert("An unexpected error occurred while processing your request.");
-                }
+            error: function () {
+                alert('An error occurred while starting the task.');
+                updateTaskStatusUI(false);
             }
         });
     });
+
+    function pollTaskStatus(taskId) {
+        const interval = setInterval(function () {
+            console.log(`Polling status for task ID: ${taskId}`);
+            $.ajax({
+                url: `/recharging/task-status/${taskId}`,  // Include the specific task ID
+                type: 'GET',
+                success: function (data) {
+                    if (data.status === 'completed') {
+                        clearInterval(interval);
+                        updateTaskStatusUI(false);
+                        $('#last_invoice_number_display').text('Processing complete. File has been downloaded.');
+                        downloadFile(taskId);
+                        alert('Task completed successfully.');
+                    } else if (data.status === 'failed') {
+                        clearInterval(interval);
+                        alert(`Task failed: ${data.result}`);
+                        $('#last_invoice_number_display').text('Task failed. Please check the logs.');
+                        updateTaskStatusUI(false);
+                    }
+                },
+                error: function () {
+                    clearInterval(interval);
+                    alert('An error occurred while checking the task status.');
+                    updateTaskStatusUI(false);
+                }
+            });
+        }, 3000); // Poll every 3 seconds
+    }
+
+
+
+    function downloadFile(taskId) {
+        $.ajax({
+            url: `/recharging/download/${taskId}`,
+            type: 'GET',
+            xhrFields: { responseType: 'blob' },
+            success: function (data, status, xhr) {
+                // Get the filename from Content-Disposition header
+                const contentDisposition = xhr.getResponseHeader('Content-Disposition');
+                let filename = "combined_invoices.zip"; // Default filename
+                if (contentDisposition) {
+                    const matches = /filename="(.+?)"/.exec(contentDisposition);
+                    if (matches) filename = matches[1];
+                }
+
+                // Create a blob URL and trigger the download
+                const blob = new Blob([data], { type: 'application/zip' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+
+                // Revoke the object URL to free memory
+                window.URL.revokeObjectURL(url);
+            },
+            error: function (xhr, status, error) {
+                console.error("Download error:", error);
+                alert("An error occurred during the download.");
+            }
+        });
+    }
+
 
     $('#upload-to-xero-form').on('submit', function(event) {
         event.preventDefault(); // Prevent default form submission

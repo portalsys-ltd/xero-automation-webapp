@@ -21,7 +21,7 @@ class Config:
 
   
     # Default ENV set to 'development', change it if needed in production
-    ENV = os.environ.get('FLASK_ENV', 'production')
+    ENV = os.environ.get('FLASK_ENV', 'development')
     DEBUG = False
 
 class DevelopmentConfig(Config):
