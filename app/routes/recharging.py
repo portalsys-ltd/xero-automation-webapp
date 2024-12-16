@@ -119,41 +119,57 @@ def get_last_invoice_number_route():
 @user_login_required
 def run_recharging():
     try:
-        print(request.form)
+        print(f"Form data received: {request.form}")
         user_id = session.get('user_id')
+        print(f"user_id from session: {user_id}")
+
+        if not user_id:
+            print("Error: No user_id found in session.")
+            return jsonify({"status": "error", "message": "User not logged in."}), 400
+
         selected_month = int(request.form['selected_month'])
         selected_year = int(request.form['selected_year'])
         last_invoice_number = int(request.form['last_invoice_number']) + 1
 
         task_type = 'recharging'
+        print("Checking for active task...")
 
-        try:
-            active_task = TaskStatus.query.filter_by(user_id=user_id, task_type=task_type, status='in_progress').first()
-            print("Query successful: active_task=", active_task)
-        except Exception as e:
-            print("Error querying TaskStatus table:", e)
-            return jsonify({"status": "error", "message": "Database query failed."}), 500
-        
+        active_task = TaskStatus.query.filter_by(user_id=user_id, task_type=task_type, status='in_progress').first()
+        print(f"Query successful: active_task={active_task}")
+
         if active_task:
-            print("task in progress")
+            print("Task in progress")
             return jsonify({"status": "error", "message": "A recharging task is already in progress."}), 400
 
         # Trigger Celery task
-        task = process_recharging_task.apply_async(args=[user_id, selected_month, selected_year, last_invoice_number])
+        try:
+            task = process_recharging_task.apply_async(args=[user_id, selected_month, selected_year, last_invoice_number])
+            print(f"Task successfully queued with ID: {task.id}")
+        except Exception as e:
+            print(f"Error queuing task: {e}")
+            return jsonify({"status": "error", "message": "Failed to queue task."}), 500
 
         # Save task details to the database
-        new_task = TaskStatus(
-            task_id=task.id,
-            user_id=user_id,
-            task_type=task_type,
-            status='in_progress'
-        )
-        db.session.add(new_task)
-        db.session.commit()
+        try:
+            new_task = TaskStatus(
+                task_id=task.id,
+                user_id=user_id,
+                task_type=task_type,
+                status='in_progress'
+            )
+            db.session.add(new_task)
+            db.session.commit()
+            print(f"TaskStatus entry created for task_id: {task.id}")
+        except Exception as e:
+            print(f"Error saving TaskStatus to database: {e}")
+            return jsonify({"status": "error", "message": "Failed to save task to database."}), 500
 
         return jsonify({"status": "success", "message": "Processing started", "task_id": task.id})
     except Exception as e:
+        error_message = f"Error: {str(e)}"
+        print(error_message)
         return jsonify({"status": "error", "message": str(e)}), 500
+
 
 @recharging_bp.route('/download/<task_id>', methods=['GET'])
 def download_file(task_id):
