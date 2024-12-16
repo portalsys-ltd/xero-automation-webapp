@@ -27,10 +27,16 @@ def make_celery(app):
         app.import_name,
         broker=app.config['CELERY_BROKER_URL'],
         backend=app.config['CELERY_RESULT_BACKEND'],
-        broker_use_ssl=app.config.get('CELERY_BROKER_USE_SSL'),
-        redis_backend_use_ssl=app.config.get('CELERY_RESULT_BACKEND_USE_SSL')
     )
     celery.conf.update(app.config)
+
+    # Set SSL configurations if they exist in the app config
+    if app.config.get('CELERY_BROKER_USE_SSL'):
+        celery.conf.broker_use_ssl = app.config['CELERY_BROKER_USE_SSL']
+
+    if app.config.get('CELERY_RESULT_BACKEND_USE_SSL'):
+        celery.conf.redis_backend_use_ssl = app.config['CELERY_RESULT_BACKEND_USE_SSL']
+
 
     class ContextTask(celery.Task):
         def __call__(self, *args, **kwargs):
