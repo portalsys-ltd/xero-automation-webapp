@@ -25,8 +25,8 @@ def make_celery(app):
     """Create and configure Celery."""
     celery = Celery(
         app.import_name,
-        broker=app.config['CELERY_BROKER_URL'],
-        backend=app.config['CELERY_RESULT_BACKEND'],
+        broker=app.config['broker_url'],  # Updated key
+        backend=app.config['result_backend'],  # Updated key
         broker_use_ssl=app.config.get('broker_use_ssl'),
         redis_backend_use_ssl=app.config.get('redis_backend_use_ssl')
     )
