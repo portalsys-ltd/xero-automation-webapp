@@ -127,8 +127,13 @@ def run_recharging():
 
         task_type = 'recharging'
 
-        # Check if there's an active task of the same type for this user
-        active_task = TaskStatus.query.filter_by(user_id=user_id, task_type=task_type, status='in_progress').first()
+        try:
+            active_task = TaskStatus.query.filter_by(user_id=user_id, task_type=task_type, status='in_progress').first()
+            print("Query successful: active_task=", active_task)
+        except Exception as e:
+            print("Error querying TaskStatus table:", e)
+            return jsonify({"status": "error", "message": "Database query failed."}), 500
+        
         if active_task:
             print("task in progress")
             return jsonify({"status": "error", "message": "A recharging task is already in progress."}), 400
