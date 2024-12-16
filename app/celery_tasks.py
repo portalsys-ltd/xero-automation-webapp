@@ -2339,7 +2339,6 @@ from sqlalchemy.orm import joinedload
 @shared_task(bind=True)
 def process_recharging_task(self, user_id, selected_month, selected_year, last_invoice_number):
     try:
-
         # Fetch the TaskStatus record for the current task
         task_status = TaskStatus.query.filter_by(task_id=self.request.id).first()
 
@@ -2348,12 +2347,10 @@ def process_recharging_task(self, user_id, selected_month, selected_year, last_i
             task_status.result = "Task started."
             db.session.commit()
 
-        
-   
-
         user = User.query.get(user_id)
         current_company = user.company_name
         current_username = user.username
+
         # Log when the process starts
         add_log("Processing Macro button pressed", log_type="general", user_id=user_id)
 

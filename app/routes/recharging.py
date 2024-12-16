@@ -119,6 +119,7 @@ def get_last_invoice_number_route():
 @user_login_required
 def run_recharging():
     try:
+        print(request.form)
         user_id = session.get('user_id')
         selected_month = int(request.form['selected_month'])
         selected_year = int(request.form['selected_year'])
