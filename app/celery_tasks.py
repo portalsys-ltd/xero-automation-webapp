@@ -2823,7 +2823,9 @@ def process_recharging_task(self, user_id, selected_month, selected_year, last_i
         final_df['Account Code with Descriptor'] = final_df['Account Code Per Business'] + ' - ' + final_df['Account Code Per Business Description']
 
         # Load the Excel template
-        template_path = '/Users/nyalpatel/Desktop/XeroAutomationWebApp/Recharging_Report_Template.xlsx'  # Replace this with the actual path to your template
+        #template_path = '/Users/nyalpatel/Desktop/XeroAutomationWebApp/Recharging_Report_Template.xlsx'  # Replace this with the actual path to your template
+        template_path = os.path.join(current_app.root_path, 'static', 'templates', 'Recharging_Report_Template.xlsx')
+
         workbook = load_workbook(template_path)
         
         # Select the "Full Data Breakdown" sheet
