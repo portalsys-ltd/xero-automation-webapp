@@ -53,6 +53,11 @@ def create_app(config_name=None):
     app = Flask(__name__)
     app.config.from_object(config[config_name])
 
+    # Debugging - print the configuration to verify
+    print(f"Loaded configuration: {config_name}")
+    print(f"BROKER_URL: {app.config.get('broker_url')}")
+    print(f"RESULT_BACKEND: {app.config.get('result_backend')}")
+
     # Allow OAuth2 loop to run over http for local testing
     if app.config["ENV"] != "production":
         os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
