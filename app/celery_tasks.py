@@ -23,7 +23,6 @@ from app.models import TrackingCategoryModel, User
 import io
 import base64
 
-
 from app.xero import (
     get_tracking_categories_from_xero,
     fetch_dom_invoicing_data,

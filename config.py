@@ -44,7 +44,7 @@ class TestingConfig(Config):
 
 class ProductionConfig(Config):
     """Production configuration."""
-    DEBUG = False
+    DEBUG = True
     ENV = 'production'
     CLIENT_ID = os.environ.get('PROD_CLIENT_ID', 'E65D6D2CD7B6438C8FC7BBE21764826A')  # Fetch from environment
     CLIENT_SECRET = os.environ.get('PROD_CLIENT_SECRET', 'mMxOFA2nRbHZDdgK_QDEa8z_Nhx-Ym2UE-o_rOavjQhykzPG')  # Fetch from environment
