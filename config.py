@@ -22,12 +22,11 @@ class Config:
     CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/0')
     CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
 
-    # Add SSL options for rediss:// URLs
-    BROKER_USE_SSL = {
-        'ssl_cert_reqs': ssl.CERT_NONE  # Use ssl.CERT_NONE for self-signed certificates or Heroku Redis
+    CELERY_BROKER_USE_SSL = {
+        'ssl_cert_reqs': ssl.CERT_NONE  # Use CERT_REQUIRED in production if certificates are valid
     }
 
-    RESULT_BACKEND_USE_SSL = {
+    CELERY_RESULT_BACKEND_USE_SSL = {
         'ssl_cert_reqs': ssl.CERT_NONE  # Same as above
     }
 
