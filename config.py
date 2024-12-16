@@ -2,6 +2,9 @@
 
 import os
 
+from kombu import Connection
+import ssl
+
 basedir = os.path.abspath(os.path.dirname(__file__))
 
 class Config:
@@ -18,6 +21,13 @@ class Config:
     # Celery Configuration
     CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/0')
     CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
+
+    BROKER_USE_SSL = {
+        'ssl_cert_reqs': ssl.CERT_NONE  # Disables SSL certificate validation (Heroku Redis requirement)
+    }
+    RESULT_BACKEND_USE_SSL = {
+        'ssl_cert_reqs': ssl.CERT_NONE
+    }
 
   
     # Default ENV set to 'development', change it if needed in production
