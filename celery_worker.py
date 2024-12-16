@@ -3,6 +3,11 @@
 from app import create_app, make_celery
 import os
 
+# Print environment variables for debugging
+print("CELERY_BROKER_URL:", os.environ.get("CELERY_BROKER_URL"))
+print("CELERY_RESULT_BACKEND:", os.environ.get("CELERY_RESULT_BACKEND"))
+
+
 config_name = os.getenv('FLASK_CONFIG') or 'default'
 app = create_app(config_name)
 celery = make_celery(app)  # Initialize Celery with the app
