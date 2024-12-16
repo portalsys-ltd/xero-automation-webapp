@@ -25,10 +25,9 @@ def make_celery(app):
     """Create and configure Celery."""
     celery = Celery(
         app.import_name,
-        broker=app.config['broker_url'],  # Updated key
-        backend=app.config['result_backend'],  # Updated key
-        broker_use_ssl=app.config.get('broker_use_ssl'),
-        redis_backend_use_ssl=app.config.get('redis_backend_use_ssl')
+        broker=app.config['BROKER_UR'],  # Updated key
+        backend=app.config['CELERY_RESULT_BACKEND'],  # Updated key
+
     )
     celery.conf.update(app.config)
 
@@ -55,8 +54,8 @@ def create_app(config_name=None):
 
     # Debugging - print the configuration to verify
     print(f"Loaded configuration: {config_name}")
-    print(f"BROKER_URL: {app.config.get('broker_url')}")
-    print(f"RESULT_BACKEND: {app.config.get('result_backend')}")
+    print(f"BROKER_URL: {app.config.get('BROKER_URL')}")
+    print(f"CELERY_RESULT_BACKEND: {app.config.get('CELERY_RESULT_BACKEND')}")
 
     # Allow OAuth2 loop to run over http for local testing
     if app.config["ENV"] != "production":

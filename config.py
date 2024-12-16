@@ -19,17 +19,11 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # Celery Configuration
-    broker_url = os.environ.get('BROKER_URL', 'redis://localhost:6379/0')
-    result_backend = os.environ.get('RESULT_BACKEND', 'redis://localhost:6379/0')
+    BROKER_URL = os.environ.get('BROKER_URL', 'redis://localhost:6379/0')
+    CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
 
 
-    broker_use_ssl = {
-        'ssl_cert_reqs': ssl.CERT_NONE  # Disable SSL verification
-    }
-    redis_backend_use_ssl = {
-        'ssl_cert_reqs': ssl.CERT_NONE
-    }
-
+   
 
     # Default ENV set to 'development', change it if needed in production
     ENV = os.environ.get('FLASK_ENV', 'production')
