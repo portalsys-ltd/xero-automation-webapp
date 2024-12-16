@@ -19,14 +19,21 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # Celery Configuration
-    # Celery Configuration - Explicitly add ssl_cert_reqs to rediss://
-    CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL') + "?ssl_cert_reqs=CERT_NONE"
-    CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND') + "?ssl_cert_reqs=CERT_NONE"
+    CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+    CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
+
+    # Add SSL options for rediss:// URLs
+    BROKER_USE_SSL = {
+        'ssl_cert_reqs': ssl.CERT_NONE  # Use ssl.CERT_NONE for self-signed certificates or Heroku Redis
+    }
+
+    RESULT_BACKEND_USE_SSL = {
+        'ssl_cert_reqs': ssl.CERT_NONE  # Same as above
+    }
 
 
-  
     # Default ENV set to 'development', change it if needed in production
-    ENV = os.environ.get('FLASK_ENV', 'development')
+    ENV = os.environ.get('FLASK_ENV', 'production')
     DEBUG = False
 
 class DevelopmentConfig(Config):
