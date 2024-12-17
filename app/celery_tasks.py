@@ -155,7 +155,7 @@ def pre_process_dom_purchase_invoices_task(self, user_id):
                         continue
 
                     # Check if the nominal code exists in the database
-                    code_exists = DomNominalCodes.query.filter_by(user_id=user.id, nominal_code=nominal_code).first()
+                    code_exists = DomNominalCodes.query.filter_by(user_id=user.id, nominal_code=str(nominal_code)).first()
                     if not code_exists:
                         error_messages.append(f"Dominos Group Nominal code '{nominal_code}' does not exist in the database, please add to DOM invoice settings.")
                         all_codes_exist = False
@@ -493,7 +493,7 @@ def process_dom_purchase_invoices_task(self, user_id, week):
             
             # Retrieve the nominal code and account code for the user
             nominal_code = row['Nominal code']
-            nominal_code_record = DomNominalCodes.query.filter_by(nominal_code=nominal_code, user_id=user_id).first()
+            nominal_code_record = DomNominalCodes.query.filter_by(nominal_code=str(nominal_code), user_id=user_id).first()
             
             # Check if nominal code exists
             if nominal_code_record:
@@ -957,7 +957,7 @@ def process_dom_purchase_invoices_task_OLD(self, user_id):
             
             # Retrieve the nominal code and account code for the user
             nominal_code = row['Nominal code']
-            nominal_code_record = DomNominalCodes.query.filter_by(nominal_code=nominal_code, user_id=user_id).first()
+            nominal_code_record = DomNominalCodes.query.filter_by(nominal_code=str(nominal_code), user_id=user_id).first()
             
             # Check if nominal code exists
             if nominal_code_record:
