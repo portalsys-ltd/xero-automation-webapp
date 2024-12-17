@@ -52,7 +52,7 @@ from app.xero import (
 )
 
 
-@celery.task(bind=True, name='app.celery_tasks.pre_process_dom_purchase_invoices_task')
+@shared_task(bind=True, name='app.celery_tasks.pre_process_dom_purchase_invoices_task')
 def pre_process_dom_purchase_invoices_task(self, user_id):
     user = User.query.get(user_id)
     data, management_tenant_id = get_inbox_files_from_management_company(user)
@@ -226,7 +226,7 @@ def pre_process_dom_purchase_invoices_task(self, user_id):
         'errors': error_messages
     }
 
-@celery.task(bind=True, name='app.celery_tasks.process_dom_purchase_invoices_task')
+@shared_task(bind=True, name='app.celery_tasks.process_dom_purchase_invoices_task')
 def process_dom_purchase_invoices_task(self, user_id, week):
 
     # Load tracking codes from the database
@@ -647,7 +647,7 @@ def process_dom_purchase_invoices_task(self, user_id, week):
 
 
 
-@celery.task(bind=True, name='app.celery_tasks.process_dom_purchase_invoices_task_OLD')
+@shared_task(bind=True, name='app.celery_tasks.process_dom_purchase_invoices_task_OLD')
 def process_dom_purchase_invoices_task_OLD(self, user_id):
      # Load tracking codes from the database
     tracking_codes = {}
@@ -1106,7 +1106,7 @@ def process_dom_purchase_invoices_task_OLD(self, user_id):
 
 
 
-@celery.task(bind=True)
+@shared_task(bind=True)
 def process_dom_sales_invoices_task(self, user_id):
     # Fetch the user from the database
     user = User.query.get(user_id)
@@ -1673,7 +1673,7 @@ def check_if_credit_memo(pdf_path):
 
 
 
-@celery.task(bind=True)
+@shared_task(bind=True)
 def process_cocacola_task(self, user_id):
     # Fetch the user by user_id
     user = User.query.get(user_id)
@@ -1768,7 +1768,7 @@ def process_cocacola_task(self, user_id):
 
 
 
-@celery.task(bind=True)
+@shared_task(bind=True)
 def process_textman_task(self, user_id):
     # Fetch the user by user_id
     user = User.query.get(user_id)
@@ -1858,7 +1858,7 @@ def process_textman_task(self, user_id):
 
 
 
-@celery.task(bind=True)
+@shared_task(bind=True)
 def process_eden_farm_task(self, user_id):
     # Fetch the user by user_id
     user = User.query.get(user_id)
@@ -1951,7 +1951,7 @@ def process_eden_farm_task(self, user_id):
 
 
 # Celery task to upload invoices to Xero
-@celery.task(bind=True)
+@shared_task(bind=True)
 def upload_recharge_invoices_xero_task(self, user_id, purchase_csv_content, breakdown_csv_content, sales_invoices_csv_content):
     try:
         # Load user from the database
