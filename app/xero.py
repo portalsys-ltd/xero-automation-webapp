@@ -1016,7 +1016,7 @@ def bulk_create_bills(user, tenant_id, invoices, management_tenant_id):
             for invoice in xero_invoices_response.invoices:
 
                 # Extract the numeric part of the invoice number (assuming format "INV-X" or "INV-XB")
-                last_invoice_number_str = invoice.invoice_number.replace("INV-", "").rstrip("B")
+                last_invoice_number_str = invoice.invoice_number.replace("P-INV-", "").rstrip("B")
 
                 # Convert the extracted part to an integer, handle non-numeric cases gracefully
                 current_invoice_number = int(last_invoice_number_str) if last_invoice_number_str.isdigit() else 0
@@ -1079,10 +1079,10 @@ def bulk_create_bills(user, tenant_id, invoices, management_tenant_id):
         if invoice_reference_A_or_B == "A":
             # Increment the invoice number for "A"
             last_invoice_number += 1
-            new_invoice_number = f"INV-{last_invoice_number}"
+            new_invoice_number = f"P-INV-{last_invoice_number}"
         elif invoice_reference_A_or_B == "B":
             # Use the same invoice number but append "B"
-            new_invoice_number = f"INV-{last_invoice_number}B"
+            new_invoice_number = f"P-INV-{last_invoice_number}B"
         else:
             add_log(f"Unknown reference type '{invoice_reference_A_or_B}'.", log_type="error", user_id=user_id)
             continue
