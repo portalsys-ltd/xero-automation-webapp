@@ -29,6 +29,12 @@ Auto Workflows
            <!-- Tab Content -->
         <div class="tab-content mt-5" id="workflowTabContent">
 
+            <!-- Update Invoice Records Button -->
+            <button id="update-invoice-record-btn" class="btn btn-warning mb-3">
+                Update Invoice Records
+            </button>
+
+
             <!-- Files Overview Tab -->
             <div class="tab-pane fade show active" id="files-overview" role="tabpanel" aria-labelledby="files-overview-tab">
                 <div class="overview-section">
@@ -106,11 +112,7 @@ Auto Workflows
             <div class="tab-pane fade" id="dom-purchase" role="tabpanel" aria-labelledby="dom-purchase-tab">
                 <div class="purchase-invoice-section container mt-4">
 
-                    <!-- Update Invoice Records Button -->
-                    <button id="update-invoice-record-btn" class="btn btn-warning mb-3">
-                        Update Invoice Records
-                    </button>
-
+                    
                     <!-- Pre-Processing Section -->
                     <div class="card mb-4 shadow-sm">
                         <div class="card-header text-white" style="background-color: rgba(128, 128, 128, 1.0);">
@@ -253,30 +255,99 @@ Auto Workflows
 
             <!-- Process Dom Sales Invoices Tab -->
             <div class="tab-pane fade" id="dom-sales" role="tabpanel" aria-labelledby="dom-sales-tab">
-                <div class="sales-invoice-section">
-                    <h2>Dom Sales Invoices</h2>
-                    <div class="button-group mt-4 mb-4">
-                        <button class="btn btn-primary" onclick="processDomSalesInvoices()">Process Dom Sales Invoices</button>
+                <div class="sales-invoice-section container mt-4">
+
+                    <!-- Processing Section -->
+                    <div class="card mb-4 shadow-sm">
+                        <div class="card-header bg-secondary text-white">
+                            <h4 class="mb-0">Processing Section</h4>
+                        </div>
+                        <div class="card-body">
+                            <div class="button-group mb-4">
+                                <button class="btn btn-primary" onclick="processDomSalesInvoices()">Process Dom Sales Invoices</button>
+                            </div>
+                        </div>
                     </div>
-                    <h3>Invoices Created</h3>
-                    <table id="dom-sales-invoices-table" class="display">
-                        <thead>
-                            <tr>
-                                <th>Tenant Name</th>
-                                <th>File Name</th>
-                                <th>Supplier Name</th>
-                                <th>Start Date</th>
-                                <th>End Date</th>
-                                <th>Timestamp</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <!-- Rows will be populated here -->
-                        </tbody>
-                    </table>                    
-                    <ul id="dom-sales-log" class="log-list"></ul>
+
+                    <!-- Invoice Record Summary Section -->
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-secondary text-white">
+                            <h4 class="mb-0">Invoice Record Summary</h4>
+                        </div>
+                        <div class="card-body">
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label for="week-selector-sales" class="form-label">Select Week:</label>
+                                    <select id="week-selector-sales" class="form-select">
+                                        <option value="" disabled selected>Select Week</option>
+                                        <script>
+                                            for (let i = 1; i <= 52; i++) {
+                                                document.write(`<option value="${i}">Week ${i}</option>`);
+                                            }
+                                        </script>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="year-selector-sales" class="form-label">Select Year:</label>
+                                    <select id="year-selector-sales" class="form-select">
+                                        <option value="" disabled selected>Select Year</option>
+                                        <script>
+                                            const currentYear2 = new Date().getFullYear();
+                                            for (let y = currentYear2 - 5; y <= currentYear2; y++) {
+                                                document.write(`<option value="${y}">${y}</option>`);
+                                            }
+                                        </script>
+                                    </select>
+                                </div>
+                            </div>
+                            <button class="btn btn-primary mb-3" onclick="loadSalesInvoiceRecordSummary()">Load Summary</button>
+                            <div class="table-responsive">
+                                <table id="sales-invoice-record-summary-table" class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Store Name</th>
+                                            <th>Store Number</th>
+                                            <th>Tenant Name</th>
+                                            <th>Status for Mileage</th>
+                                            <th>Status for Sales</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Data dynamically inserted here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Invoices Created Section -->
+                    <div class="card mt-4 shadow-sm">
+                        <div class="card-header bg-secondary text-white">
+                            <h4 class="mb-0">Invoices Created</h4>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table id="dom-sales-invoices-table" class="table table-hover">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Tenant Name</th>
+                                            <th>File Name</th>
+                                            <th>Supplier Name</th>
+                                            <th>Start Date</th>
+                                            <th>End Date</th>
+                                            <th>Timestamp</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Rows will be populated here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
+
 
             <!-- Supplier Invoice Processing Section -->
             <div class="tab-pane fade" id="supplier-invoices" role="tabpanel" aria-labelledby="supplier-invoices-tab">
@@ -867,6 +938,53 @@ Auto Workflows
                 alert('Failed to load summary.');
             });
         }
+        
+        function loadSalesInvoiceRecordSummary() {
+            const week = document.getElementById('week-selector-sales').value;
+            const year = document.getElementById('year-selector-sales').value;
+
+            if (!week || !year) {
+                alert("Please select both week and year!");
+                return;
+            }
+
+            fetch('/auto_workflows/load_invoice_summary_sales', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ week_number: parseInt(week), year: parseInt(year) })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const tableBody = document.querySelector('#sales-invoice-record-summary-table tbody');
+                tableBody.innerHTML = ''; // Clear previous content
+
+                if (data.error) {
+                    alert("Error: " + data.error);
+                    return;
+                }
+
+                data.data.forEach(record => {
+                    const row = `
+                        <tr>
+                            <td>${record.store_name}</td>
+                            <td>${record.store_number}</td>
+                            <td>${record.tenant_name}</td>
+                            <td>${record.mileage_status}</td>
+                            <td>${record.sales_status}</td>
+                        </tr>`;
+                    tableBody.innerHTML += row;
+                });
+
+                if (data.data.length === 0) {
+                    tableBody.innerHTML = `<tr><td colspan="5" class="text-center">No records found</td></tr>`;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to load summary.');
+            });
+        }
+
 
 
 

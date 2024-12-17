@@ -28,5 +28,5 @@ ALTER TABLE TaskStatus RENAME TO task_status;
 DROP TABLE IF EXISTS TaskStatus;
 
 
-DELETE FROM InvoiceRecord;
+DELETE FROM invoice_record;
 

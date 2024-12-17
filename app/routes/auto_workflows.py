@@ -322,3 +322,68 @@ def load_invoice_summary():
     except Exception as e:
         print(f"Error loading invoice summary: {str(e)}")
         return jsonify({"error": "Failed to load summary"}), 500
+    
+
+@auto_workflows_bp.route('/load_invoice_summary_sales', methods=['POST'])
+@user_login_required
+def load_invoice_summary_sales():
+    try:
+        import re
+
+        # Get week and year from the request body
+        data = request.get_json()
+        week_number = data.get("week_number")
+        year = data.get("year")
+
+        # Validate inputs
+        if not week_number or not year:
+            return jsonify({"error": "Week and year are required"}), 400
+
+        # Fetch all tenant names for the current user
+        tenant_names = [
+            tenant.tenant_name
+            for tenant in DomPurchaseInvoicesTenant.query.filter_by(user_id=current_user.id).all()
+        ]
+
+        # Fetch all stores for those tenants from TrackingCategoryModel
+        store_details = TrackingCategoryModel.query.filter(
+            TrackingCategoryModel.tenant_name.in_(tenant_names)
+        ).all()
+
+        # Prepare store data for matching
+        store_records = []
+        for store in store_details:
+            # Ignore invalid store numbers
+            if not store.store_number or not re.match(r"^\d{5}$", store.store_number):
+                continue
+
+            # Check for mileage record
+            mileage_record = InvoiceRecord.query.filter_by(
+                week_number=week_number,
+                year=year,
+                store_number=store.store_number,
+                invoice_type="mileage"
+            ).first()
+
+            # Check for sales record
+            sales_record = InvoiceRecord.query.filter_by(
+                week_number=week_number,
+                year=year,
+                store_number=store.store_number,
+                invoice_type="sales"
+            ).first()
+
+            # Append store record to the response list
+            store_records.append({
+                "store_name": store.tracking_category_option,
+                "store_number": store.store_number,
+                "tenant_name": store.tenant_name,
+                "mileage_status": "✅" if mileage_record else "❌",
+                "sales_status": "✅" if sales_record else "❌"
+            })
+
+        return jsonify({"data": store_records}), 200
+
+    except Exception as e:
+        print(f"Error loading invoice summary: {str(e)}")
+        return jsonify({"error": "Failed to load summary"}), 500

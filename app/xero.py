@@ -2670,10 +2670,10 @@ def update_invoice_records(user):
                 # Fetch invoices for each contact
                 for contact_name in contact_names:
                     print(f"Processing contact: {contact_name}")
-                    where_query = f"Contact.Name == \"{contact_name}\" && Status == \"AUTHORISED\""
+                    where_query = f"Contact.Name == \"{contact_name}\" && (Status == \"AUTHORISED\" || Status == \"DRAFT\")"
 
                     try:
-                        invoices_response = accounting_api.get_invoices(tenant_id, where=where_query, page=1)
+                        invoices_response = accounting_api.get_invoices(tenant_id, where=where_query, page=1, created_by_my_app=True)
                     except Exception as ex:
                         print(f"Failed to fetch invoices for contact {contact_name}: {ex}")
                         continue
@@ -2683,8 +2683,6 @@ def update_invoice_records(user):
                     for invoice in invoices_response.invoices:
                  
                         invoice_date = invoice.date
-                        
-
                         week_number = invoice_date.isocalendar()[1]
                         year = invoice_date.year
                        
