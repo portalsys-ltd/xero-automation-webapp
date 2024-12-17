@@ -10,6 +10,7 @@ from app.models import TrackingCategoryModel, User, DomPurchaseInvoicesTenant, I
 import pandas as pd
 import re
 import json
+from app.routes.auth import user_login_required
 
 auto_workflows_bp = Blueprint('auto_workflows', __name__, url_prefix='/auto_workflows')
 
@@ -238,6 +239,7 @@ def task_status(task_id):
 
 
 @auto_workflows_bp.route('/start_update_invoice_record', methods=['POST'])
+@user_login_required
 def start_update_invoice_record():
     try:
         print("Route triggered successfully!")  # Debugging statement
@@ -264,6 +266,7 @@ def start_update_invoice_record():
 
 
 @auto_workflows_bp.route('/load_invoice_summary', methods=['POST'])
+@user_login_required
 def load_invoice_summary():
     try:
         # Get week and year from the request body
