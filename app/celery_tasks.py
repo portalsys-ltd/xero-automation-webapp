@@ -14,6 +14,7 @@ from collections import defaultdict
 import pandas as pd
 import pdfplumber
 import csv
+from celery import shared_task
 from io import StringIO, BytesIO
 
 
@@ -2325,7 +2326,7 @@ def upload_recharge_invoices_xero_task(self, user_id, purchase_csv_content, brea
 ##########################RECHARGING######################################
 
 import os
-from celery import shared_task
+
 from io import BytesIO
 import zipfile
 import pandas as pd
