@@ -105,6 +105,12 @@ Auto Workflows
             <!-- Process Dom Purchase Invoices Tab -->
             <div class="tab-pane fade" id="dom-purchase" role="tabpanel" aria-labelledby="dom-purchase-tab">
                 <div class="purchase-invoice-section container mt-4">
+
+                    <!-- Update Invoice Records Button -->
+                    <button id="update-invoice-record-btn" class="btn btn-warning mb-3">
+                        Update Invoice Records
+                    </button>
+
                     <!-- Pre-Processing Section -->
                     <div class="card mb-4 shadow-sm">
                         <div class="card-header text-white" style="background-color: rgba(128, 128, 128, 1.0);">
@@ -802,7 +808,7 @@ Auto Workflows
 
         
 
-        document.getElementById('trigger-task-btn').addEventListener('click', () => {
+        document.getElementById('update-invoice-record-btn').addEventListener('click', () => {
             fetch('/auto_workflows/start_update_invoice_record', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' }
