@@ -575,65 +575,70 @@ def delete_dms_account_code():
     return jsonify({"status": "failure"})
 
 
-from sqlalchemy.dialects.postgresql import insert
-
 @main_bp.route('/sync_tracking_categories_with_xero', methods=['POST'])
 def sync_tracking_categories_with_xero():
     # Step 1: Fetch all tracking categories for all tenants
     xero_tracking_codes = get_tracking_categories_from_xero(current_user)
 
-    # Step 2: Fetch the tenants for the current user
+    # Step 2: Fetch the tenants from XeroTenant for the current user, excluding tenants containing the user's company name
     user_id = current_user.id
-    company_name = current_user.company_name.strip().lower()
+    company_name = current_user.company_name.strip().lower()  # Normalize the user's company name
 
+    # Filter tenants for the current user, excluding those whose tenant_name contains the user's company name
     user_tenants = XeroTenant.query.filter(
         XeroTenant.user_id == user_id,
-        ~XeroTenant.tenant_name.ilike(f"%{company_name}%")
+        ~XeroTenant.tenant_name.ilike(f"%{company_name}%")  # Exclude tenant names that contain the company name
     ).all()
 
+    # Normalize tenant names (convert to lowercase and strip whitespace)
     user_tenant_names = [tenant.tenant_name.strip().lower() for tenant in user_tenants]
 
-    # Step 3: Filter tracking categories
+
+    # Step 3: Filter tracking categories, keeping only those that match the user's tenants
     filtered_tracking_codes = [
         code for code in xero_tracking_codes if code['tenant_name'].strip().lower() in user_tenant_names
     ]
 
-    # Step 4: Insert or ignore duplicates using 'ON CONFLICT DO NOTHING'
+    # Step 4: Insert filtered tracking codes into the TrackingCategory database, avoiding duplicates
     added_codes = 0
     for code in filtered_tracking_codes:
-        stmt = insert(TrackingCategoryModel).values(
-            user_id=user_id,
-            tenant_name=code['tenant_name'],
-            tracking_category_id=code['tracking_category_id'],
-            tracking_category_name=code['tracking_category_name'],
-            tracking_category_option=code['tracking_category_option'],
-            tracking_option_id=code['tracking_option_id'],
-            store_number=None,
-            store_postcode=None,
-            store_contact=None
-        ).on_conflict_do_nothing()  # Avoid duplicates
+        existing_category = TrackingCategoryModel.query.filter_by(tracking_option_id=code['tracking_option_id']).first()
 
-        db.session.execute(stmt)
-        added_codes += 1
+        if not existing_category:  # Only add if not already in the database
+            new_tracking_category = TrackingCategoryModel(
+                user_id=user_id,
+                tenant_name=code['tenant_name'],
+                tracking_category_id=code['tracking_category_id'],
+                tracking_category_name=code['tracking_category_name'],
+                tracking_category_option=code['tracking_category_option'],
+                tracking_option_id=code['tracking_option_id'],
+                store_number=None,  # Set these as None for now unless you have additional logic
+                store_postcode=None,
+                store_contact=None
+            )
+            db.session.add(new_tracking_category)
+            added_codes += 1
 
-    # Step 5: Delete records not in Xero anymore
+    # Step 5: Get all tracking option IDs from the filtered Xero data
     xero_tracking_option_ids = [code['tracking_option_id'] for code in filtered_tracking_codes]
+
+    # Step 6: Fetch all tracking categories from the database for this user
     existing_tracking_categories = TrackingCategoryModel.query.filter_by(user_id=user_id).all()
 
+    # Step 7: Identify and delete tracking categories that are in the database but not in Xero
     deleted_codes = 0
     for category in existing_tracking_categories:
         if category.tracking_option_id not in xero_tracking_option_ids:
             db.session.delete(category)
             deleted_codes += 1
 
-    # Commit changes
+    # Commit changes to the database
     db.session.commit()
 
     return jsonify({
         'status': 'success',
         'message': f'{added_codes} tracking categories synced successfully, {deleted_codes} tracking categories deleted.'
     })
-
 
 
 
