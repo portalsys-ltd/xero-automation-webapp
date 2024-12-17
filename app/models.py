@@ -236,6 +236,17 @@ class TaskStatus(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class InvoiceRecord(db.Model):
+    __tablename__ = 'invoice_record'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    invoice_type = db.Column(db.String(50), nullable=False)  # Invoice type (e.g., purchase_invoice)
+    week_number = db.Column(db.Integer, nullable=False)      # Week number (1-52)
+    year = db.Column(db.Integer, nullable=False)             # Year (e.g., 2024)
+    store_number = db.Column(db.String(20), nullable=False)  # Store number (e.g., S11111)
+    store_name = db.Column(db.String(100), nullable=False)   # Store name
+    tenant_name = db.Column(db.String(100), nullable=False)  # Tenant name
+
 
 
 

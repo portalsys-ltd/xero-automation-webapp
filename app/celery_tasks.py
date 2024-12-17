@@ -46,7 +46,8 @@ from app.xero import (
     post_recharge_purchase_invoice_xero,
     post_recharge_sales_invoice_xero, 
     get_inbox_files_from_management_company,
-    rename_file
+    rename_file,
+    update_invoice_records
 
 )
 
@@ -2931,3 +2932,18 @@ def combine_last_two_columns(df):
             break  # Stop once we've handled one pair of columns
     
     return df
+
+
+@celery.task(bind=True)
+def update_invoice_record_task(self, user_id):
+    try:
+        # Step 1: Retrieve user-specific Xero credentials
+        user = User.query.get(user_id)
+
+        status = update_invoice_records(user)
+
+        print(status)
+    
+    except Exception as e:
+        self.update_state(state='FAILURE', meta={'exc': str(e)})
+        raise e

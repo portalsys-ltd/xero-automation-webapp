@@ -576,7 +576,6 @@ def delete_dms_account_code():
 
 
 @main_bp.route('/sync_tracking_categories_with_xero', methods=['POST'])
-@xero_login_required
 def sync_tracking_categories_with_xero():
     # Step 1: Fetch all tracking categories for all tenants
     xero_tracking_codes = get_tracking_categories_from_xero(current_user)
@@ -645,7 +644,7 @@ def sync_tracking_categories_with_xero():
 
 # Route to get tracking categories from the database
 @main_bp.route('/get_tracking_categories', methods=['GET'])
-@xero_login_required
+
 def get_tracking_categories():
     user_id = session.get('user_id')
     if not user_id:
@@ -657,7 +656,7 @@ def get_tracking_categories():
 
 
 @main_bp.route('/save_tracking_categories', methods=['POST'])
-@xero_login_required
+
 def save_tracking_categories():
     if not request.is_json:
         return jsonify({'status': 'error', 'message': 'Invalid content type, expected application/json'}), 415

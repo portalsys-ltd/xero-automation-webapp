@@ -69,7 +69,7 @@ Auto Workflows
                                 <div class="card-body">
                                     <i id="coca-cola-icon" class="fas fa-warehouse fa-2x mb-3"></i>
                                     <i id="eden-farm-icon" class="fas fa-warehouse fa-2x mb-3"></i>
-                                    <i id="text_man-icon" class="fas fa-warehouse fa-2x mb-3"></i>
+                                    <i id="text-man-icon" class="fas fa-warehouse fa-2x mb-3"></i>
                                     <h5 class="card-title">Supplier Invoices</h5>
                                     <p class="lead">Coca-Cola: <span id="coca-cola-invoices-count" class="file-count">0</span> files</p>
                                     <p class="lead">Eden Farm: <span id="eden-farm-invoices-count" class="file-count">0</span> files</p>
@@ -101,80 +101,149 @@ Auto Workflows
                 </div>
             </div>
 
-        
-
+          
             <!-- Process Dom Purchase Invoices Tab -->
             <div class="tab-pane fade" id="dom-purchase" role="tabpanel" aria-labelledby="dom-purchase-tab">
-                <div class="purchase-invoice-section">
-                    <h2>Dom Purchase Invoices (CSV and PDF pair)</h2>
-                    
-
-                    <div class="button-group mt-4 mb-4">
-                        <button id="process-btn" class="btn btn-primary" onclick="preProcessDomPurchaseInvoices()">Pre Process Dom Purchase Invoices</button>
+                <div class="purchase-invoice-section container mt-4">
+                    <!-- Pre-Processing Section -->
+                    <div class="card mb-4 shadow-sm">
+                        <div class="card-header text-white" style="background-color: rgba(128, 128, 128, 1.0);">
+                            <h4 class="mb-0">Pre-Processing Section</h4>
+                        </div>
+                        <div class="card-body">
+                            <button id="pre-process-btn" class="btn btn-primary mb-3" onclick="preProcessDomPurchaseInvoices()">
+                                Pre-Process Dom Purchase Invoices
+                            </button>
+                            <h5 class="mt-4">Weekly Matched Files Summary</h5>
+                            <button id="update-weekly-matched-files" class="btn btn-info mb-3" onclick="fetchWeeklyMatchedFilesSummary()">Update</button>
+                            <div class="table-responsive">
+                                <table id="weekly-matched-files-table" class="table table-hover">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Week</th>
+                                            <th>Matched Files</th>
+                                            <th>Expected Files</th>
+                                            <th>Missing Stores</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Data dynamically inserted here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
 
-                     <!-- Week Selection Dropdown -->
-                    <label for="week-selector" class="form-label">Select Week:</label>
-                    <select id="week-selector" class="form-select" aria-label="Select week">
-                        <option selected disabled>Select a week</option>
-                    </select>
+                    <!-- Processing Section -->
+                    <div class="card mb-4 shadow-sm">
+                        <div class="card-header text-white" style="background-color: rgba(128, 128, 128, 1.0);">
+                            <h4 class="mb-0">Processing Section</h4>
+                        </div>
+                        <div class="card-body">
+                            <button id="process-btn" class="btn btn-primary mb-3" onclick="processDomPurchaseInvoices()">
+                                Process Dom Purchase Invoices
+                            </button>
+                            <div id="progress-container" class="progress mt-3" style="display:none;">
+                                <div id="progress-bar" class="progress-bar progress-bar-striped" style="width: 0%;"></div>
+                            </div>
+                            <p id="progress-text" class="mt-2">0% Complete</p>
+                            <p id="task-status" class="mt-3 text-muted"></p>
 
-                    <div class="button-group mt-4 mb-4">
-                        <button id="process-btn" class="btn btn-primary" onclick="processDomPurchaseInvoices()">Process Dom Purchase Invoices</button>
+                            <!-- Task Errors -->
+                            <div id="task-errors" class="alert alert-danger mt-3" style="display: none;">
+                                <h5>Task Errors:</h5>
+                                <ul id="error-list" class="mb-0">
+                                    <!-- Error messages dynamically added here -->
+                                </ul>
+                            </div>
+                        </div>
                     </div>
 
-                    <div id="progress-container" style="display:none;">
-                        <div id="progress-bar" style="width: 0%; height: 20px; background-color: green;"></div>
-                        <p id="progress-text">0% Complete</p>
+                    <!-- Invoice Record Summary Section -->
+                    <div class="card mb-4 shadow-sm">
+                        <div class="card-header text-white" style="background-color: rgba(128, 128, 128, 1.0);">
+                            <h4 class="mb-0">Invoice Record Summary</h4>
+                        </div>
+                        <div class="card-body">
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label for="week-selector-summary" class="form-label">Select Week:</label>
+                                    <select id="week-selector-summary" class="form-select">
+                                        <option value="" disabled selected>Select Week</option>
+                                        <script>
+                                            for (let i = 1; i <= 52; i++) {
+                                                document.write(`<option value="${i}">Week ${i}</option>`);
+                                            }
+                                        </script>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="year-selector-summary" class="form-label">Select Year:</label>
+                                    <select id="year-selector-summary" class="form-select">
+                                        <option value="" disabled selected>Select Year</option>
+                                        <script>
+                                            const currentYear = new Date().getFullYear();
+                                            for (let y = currentYear - 5; y <= currentYear; y++) {
+                                                document.write(`<option value="${y}">${y}</option>`);
+                                            }
+                                        </script>
+                                    </select>
+                                </div>
+                            </div>
+                            <button class="btn btn-primary mb-3" onclick="loadInvoiceRecordSummary()">Load Summary</button>
+                            <div class="table-responsive">
+                                <table id="invoice-record-summary-table" class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Store Name</th>
+                                            <th>Store Number</th>
+                                            <th>Tenant Name</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Data dynamically inserted here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
-                    <p id="task-status"></p>
 
-                    <div id="task-errors" class="alert alert-danger" style="display: none;">
-                        <h4>Task Errors:</h4>
-                        <ul id="error-list">
-                            <!-- Error messages will be dynamically added here -->
-                        </ul>
+                    <!-- Invoices Created Section -->
+                    <div class="card shadow-sm">
+                        <div class="card-header text-white" style="background-color: rgba(128, 128, 128, 1.0);">
+                            <h4 class="mb-0">Invoices Created</h4>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table id="dom-purchase-invoices-table" class="table table-hover">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Tenant Name</th>
+                                            <th>CSV Filename</th>
+                                            <th>PDF Filename</th>
+                                            <th>Total Invoice</th>
+                                            <th>Statement Date</th>
+                                            <th>Store Code</th>
+                                            <th>Timestamp</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Data dynamically inserted here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
-
-                    <!-- Weekly Matched Files Section -->
-                    <h3>Weekly Matched Files Summary</h3>
-
-                    <!-- Update Button -->
-                    <button id="update-weekly-matched-files" class="btn btn-primary mb-3" onclick="fetchWeeklyMatchedFilesSummary()">Update</button>
-
-                    <table id="weekly-matched-files-table" class="table table-striped mt-3">
-                        <thead>
-                            <tr>
-                                <th>Week</th>
-                                <th>Matched Files</th>
-                                <th>Expected Files</th>
-                                <th>Missing Stores</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <!-- Data will be dynamically inserted here -->
-                        </tbody>
-                    </table>
-                    
-                    <h3>Invoices Created</h3>
-                    <table id="dom-purchase-invoices-table">
-                        <thead>
-                            <tr>
-                                <th>Tenant Name</th>
-                                <th>CSV Filename</th>
-                                <th>PDF Filename</th>
-                                <th>Total Invoice</th>
-                                <th>Statement Date</th>
-                                <th>Store Code</th>
-                                <th>Timestamp</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <!-- Data will be dynamically inserted here -->
-                        </tbody>
-                    </table>                    
-                </div>             
+                </div>
             </div>
+
+
+
+            
+
+
+            
 
             <!-- Process Dom Sales Invoices Tab -->
             <div class="tab-pane fade" id="dom-sales" role="tabpanel" aria-labelledby="dom-sales-tab">
@@ -729,6 +798,70 @@ Auto Workflows
                 }
             }, 500);  // Flash every 500ms
         }
+
+
+        
+
+        document.getElementById('trigger-task-btn').addEventListener('click', () => {
+            fetch('/auto_workflows/start_update_invoice_record', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message || 'Task triggered successfully!');
+            })
+            .catch(error => {
+                console.error('Error triggering task:', error);
+                alert('Failed to trigger task.');
+            });
+        });
+
+        function loadInvoiceRecordSummary() {
+            const week = document.getElementById('week-selector-summary').value;
+            const year = document.getElementById('year-selector-summary').value;
+
+            if (!week || !year) {
+                alert("Please select both week and year!");
+                return;
+            }
+
+            fetch('/auto_workflows/load_invoice_summary', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ week_number: parseInt(week), year: parseInt(year) })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const tableBody = document.querySelector('#invoice-record-summary-table tbody');
+                tableBody.innerHTML = '';  // Clear previous content
+
+                if (data.error) {
+                    alert("Error: " + data.error);
+                    return;
+                }
+
+                data.data.forEach(record => {
+                    const row = `
+                        <tr>
+                            <td>${record.store_name}</td>
+                            <td>${record.store_number}</td>
+                            <td>${record.tenant_name}</td>
+                            <td>${record.status}</td>
+                        </tr>`;
+                    tableBody.innerHTML += row;
+                });
+
+                if (data.data.length === 0) {
+                    tableBody.innerHTML = `<tr><td colspan="4" class="text-center">No records found</td></tr>`;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to load summary.');
+            });
+        }
+
 
 
 

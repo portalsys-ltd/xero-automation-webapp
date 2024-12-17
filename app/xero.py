@@ -11,7 +11,7 @@ from xero_python.api_client.oauth2 import OAuth2Token
 import json
 import time
 from functools import wraps
-from app.models import XeroTenant, Company, DomPurchaseInvoicesTenant, StoreAccountCodes, TrackingCategoryModel
+from app.models import XeroTenant, Company, DomPurchaseInvoicesTenant, StoreAccountCodes, TrackingCategoryModel, InvoiceRecord
 from enum import Enum
 from datetime import datetime, timedelta
 import pandas as pd
@@ -727,7 +727,7 @@ def aggregate_auto_workflows_data(user):
         add_log("No allowed tenants found for the user session.", log_type="errors")
 
     for connection in tenants:
-        if connection.tenant_type == "ORGANISATION" and connection.tenant_name in allowed_tenants:
+        if connection.tenant_type == "ORGANISATION" and (connection.tenant_name in allowed_tenants or connection.tenant_name == user.company_name):
             xero_tenant_id = connection.tenant_id
             try:
                 # Fetch all files from the tenant's inbox
@@ -741,7 +741,7 @@ def aggregate_auto_workflows_data(user):
 
                 # Count Dom Purchase Invoices (matching .csv and .pdf with "CustAccountStatementExt.Report")
                 dom_purchase_invoice_count = 0
-                dom_purchase_files = [file for file in filtered_files if file.name.startswith("CustAccountStatementExt.Report") and (file.name.endswith(".csv") or file.name.endswith(".pdf"))]
+                dom_purchase_files = [file for file in filtered_files if "CustAccountStatementExt.Report" in file.name and (file.name.endswith(".csv") or file.name.endswith(".pdf"))]
 
                 base_names = set([file.name.rsplit('.', 1)[0] for file in dom_purchase_files])
                 for base_name in base_names:
@@ -761,7 +761,7 @@ def aggregate_auto_workflows_data(user):
                 # Process supplier invoices (Coca-Cola, Eden Farm, Text Man)
                 invoices = accounting_api.get_invoices(
                     xero_tenant_id, 
-                    where='(Contact.Name.Contains("COCACOLA") OR Contact.Name.Contains("Eden Farm") OR Contact.Name.Contains("Text Management")) AND AmountDue > 0 AND Status == "AUTHORISED"'
+                    where='(Contact.Name.Contains("Coca-Cola") OR Contact.Name.Contains("Eden Farm") OR Contact.Name.Contains("Text Management")) AND AmountPaid == 0 AND AmountDue > 0 AND Status == "AUTHORISED"'
                 )
 
                 coca_cola_count = 0
@@ -771,15 +771,24 @@ def aggregate_auto_workflows_data(user):
                 for invoice in invoices.invoices:
                     contact_name = invoice.contact.name.lower()
 
+                    def append_or_increment(tenant_list, tenant_name):
+                        for tenant in tenant_list:  # Iterate through the list
+                            if tenant["name"] == tenant_name:  # Check if tenant already exists
+                                tenant["file_count"] += 1  # Increment file_count
+                                return  # Exit the function once updated
+                        # If tenant is not found, append a new entry
+                        tenant_list.append({"name": tenant_name, "file_count": 1})
+
+                    # Updated logic
                     if "cocacola" in contact_name:
                         coca_cola_count += 1
-                        tenant_file_data["coca_cola_tenants"].append({"name": connection.tenant_name, "file_count": 1})
+                        append_or_increment(tenant_file_data["coca_cola_tenants"], connection.tenant_name)
                     elif "eden farm" in contact_name:
                         eden_farm_count += 1
-                        tenant_file_data["eden_farm_tenants"].append({"name": connection.tenant_name, "file_count": 1})
+                        append_or_increment(tenant_file_data["eden_farm_tenants"], connection.tenant_name)
                     elif "text management" in contact_name:
                         text_man_count += 1
-                        tenant_file_data["text_man_tenants"].append({"name": connection.tenant_name, "file_count": 1})
+                        append_or_increment(tenant_file_data["text_man_tenants"], connection.tenant_name)
 
                 supplier_invoices_count["coca_cola"] += coca_cola_count
                 supplier_invoices_count["eden_farm"] += eden_farm_count
@@ -796,6 +805,7 @@ def aggregate_auto_workflows_data(user):
                 workflow_log.append(f"Unexpected error fetching files for tenant {connection.tenant_name}: {e}")
 
     workflow_log.append(f"Total Coca-Cola invoices with untracked line items: {untracked_coca_cola_invoices}")
+
 
     return jsonify({
         "total_files": total_files,
@@ -2616,5 +2626,153 @@ def get_last_invoice_number(user, selected_month, selected_year):
         return {"status": "error", "message": f"Error fetching invoice data: {str(e)}"}
 
 
+def update_invoice_records(user):
+    try:
+        # Get Xero client and API instance
+        api_client, xero_app = get_xero_client_for_user(user)
+        accounting_api = AccountingApi(api_client)
 
+        # Fetch user's tenants
+        tenants = XeroTenant.query.filter_by(user_id=user.id).all()
+        print(f"Found tenants: {[tenant.tenant_name for tenant in tenants]}")
+
+        # Fetch allowed tenant names for the current user
+        allowed_tenants = [
+            tenant.tenant_name for tenant in DomPurchaseInvoicesTenant.query.filter_by(user_id=user.id).all()
+        ]
+        print(f"Allowed tenants: {allowed_tenants}")
+
+        # Process only tenants that are in the allowed tenants list
+        for tenant in tenants:
+            if tenant.tenant_name in allowed_tenants:
+                print(f"Processing tenant: {tenant.tenant_name}")
+
+                tenant_id = tenant.tenant_id
+                tenant_name = tenant.tenant_name
+
+                # Fetch matching tracking categories for the tenant
+                tracking_categories = TrackingCategoryModel.query.filter_by(tenant_name=tenant_name).all()
+                print(f"Tracking categories found: {len(tracking_categories)}")
+
+                store_contact_to_details = {
+                    category.store_contact: {
+                        "store_number": category.store_number,
+                        "store_name": category.tracking_category_option
+                    }
+                    for category in tracking_categories if category.store_contact
+                }
+                print(f"Store contact details: {store_contact_to_details}")
+
+                # Add 'MILEAGE' and 'SALES' contacts manually
+                contact_names = list(store_contact_to_details.keys()) + ['MILEAGE', 'SALES']
+                print(f"Contact names to process: {contact_names}")
+
+                # Fetch invoices for each contact
+                for contact_name in contact_names:
+                    print(f"Processing contact: {contact_name}")
+                    where_query = f"Contact.Name == \"{contact_name}\" && Status == \"AUTHORISED\""
+
+                    try:
+                        invoices_response = accounting_api.get_invoices(tenant_id, where=where_query, page=1)
+                    except Exception as ex:
+                        print(f"Failed to fetch invoices for contact {contact_name}: {ex}")
+                        continue
+
+                    print(f"Number of invoices fetched: {len(invoices_response.invoices)}")
+
+                    for invoice in invoices_response.invoices:
+                 
+                        invoice_date = invoice.date
+                        
+
+                        week_number = invoice_date.isocalendar()[1]
+                        year = invoice_date.year
+                       
+
+                        # Determine invoice type
+                        if contact_name == "MILEAGE":
+                            store_name = invoice.reference.split(" - ")[0]  # Extract store name before the hyphen
+                            print(f"Store name extracted from reference: {store_name}")
+                            store_number = None
+
+                            # Fetch store_number from TrackingCategoryModel based on store_name
+                            tracking_category = TrackingCategoryModel.query.filter_by(
+                                tenant_name=tenant_name,
+                                tracking_category_option=store_name
+                            ).first()
+
+                            if tracking_category:
+                                store_number = tracking_category.store_number
+                            else:
+                                print(f"No store number found for store name: {store_name}")
+
+                            invoice_type = "mileage"
+                            if not store_number:
+                                store_number = "UNKNOWN"
+
+                        elif contact_name == "SALES":
+                            store_name = invoice.reference.split(" - ")[0]  # Extract store name before the hyphen
+                            print(f"Store name extracted from reference: {store_name}")
+                            store_number = None
+
+                            # Fetch store_number from TrackingCategoryModel based on store_name
+                            tracking_category = TrackingCategoryModel.query.filter_by(
+                                tenant_name=tenant_name,
+                                tracking_category_option=store_name
+                            ).first()
+
+                            if tracking_category:
+                                store_number = tracking_category.store_number
+                            else:
+                                print(f"No store number found for store name: {store_name}")
+
+                            invoice_type = "sales"
+                            if not store_number:
+                                store_number = "UNKNOWN"
+
+                        else:
+                            store_details = store_contact_to_details.get(contact_name, {})
+                            store_number = store_details.get("store_number", None)
+                            store_name = store_details.get("store_name", contact_name)
+                            invoice_type = "purchase_invoice"
+
+                        print(f"Invoice Type: {invoice_type}, Store Number: {store_number}, Store Name: {store_name}")
+
+                        # Avoid duplicate records for the same week
+                        existing_record = InvoiceRecord.query.filter_by(
+                            week_number=week_number,
+                            year=year,
+                            store_number=store_number.strip(),
+                            invoice_type=invoice_type.strip().lower()
+                        ).first()
+
+                        if existing_record:
+                            print(f"Duplicate record detected: Week {week_number}, Year {year}, Store {store_number}, Type {invoice_type}")
+                        else:
+                            new_record = InvoiceRecord(
+                                invoice_type=invoice_type,
+                                week_number=week_number,
+                                year=year,
+                                store_number=store_number,
+                                store_name=store_name,
+                                tenant_name=tenant_name
+                            )
+                            db.session.add(new_record)
+                            print(f"Added new record: {new_record}")
+                            add_log(f"Added invoice: {invoice_type} for store {store_number}, week {week_number}, year {year}", 
+                                    log_type="general", user_id=user.id)
+
+        db.session.commit()
+        add_log("Invoice records updated successfully.", log_type="general", user_id=user.id)
+        print("Invoice records updated successfully.")
+
+    except Exception as e:
+        print(f"Exception occurred: {e}")
+        add_log(f"Error updating invoice records: {str(e)}", log_type="error", user_id=user.id)
+        db.session.rollback()
+        raise Exception(f"Error updating invoice records: {str(e)}") from e
+
+
+
+    
 

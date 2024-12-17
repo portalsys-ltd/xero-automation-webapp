@@ -5,10 +5,11 @@ from app.xero import xero_token_required, aggregate_auto_workflows_data, get_inb
 from app.routes.logs import add_log
 from xero_python.exceptions import HTTPStatusException
 from flask_login import current_user
-from app.celery_tasks import pre_process_dom_purchase_invoices_task, process_dom_purchase_invoices_task, process_dom_sales_invoices_task, process_cocacola_task, process_eden_farm_task, process_textman_task
-from app.models import TrackingCategoryModel, User, DomPurchaseInvoicesTenant
+from app.celery_tasks import pre_process_dom_purchase_invoices_task, process_dom_purchase_invoices_task, process_dom_sales_invoices_task, process_cocacola_task, process_eden_farm_task, process_textman_task, update_invoice_record_task
+from app.models import TrackingCategoryModel, User, DomPurchaseInvoicesTenant, InvoiceRecord
 import pandas as pd
 import re
+import json
 
 auto_workflows_bp = Blueprint('auto_workflows', __name__, url_prefix='/auto_workflows')
 
@@ -234,3 +235,87 @@ def task_status(task_id):
 
     return jsonify(response)
 
+
+
+@auto_workflows_bp.route('/start_update_invoice_record', methods=['POST'])
+def start_update_invoice_record():
+    try:
+        print("Route triggered successfully!")  # Debugging statement
+        
+        # Retrieve the current user
+        user_id = current_user.id
+        print(f"Current User ID: {user_id}")  # Debugging
+
+        if not user_id:
+            return jsonify({"error": "User not found"}), 404
+
+        # Trigger the Celery task
+        task = update_invoice_record_task.apply_async(args=[user_id])
+        print(f"Task {task.id} started for user {user_id}")  # Debugging task trigger
+
+        return jsonify({"task_id": task.id, "message": "Task triggered successfully"}), 202
+
+    except Exception as e:
+        print(f"Error occurred: {str(e)}")  # Print error to console
+        return jsonify({"error": str(e)}), 500
+
+
+
+
+
+@auto_workflows_bp.route('/load_invoice_summary', methods=['POST'])
+def load_invoice_summary():
+    try:
+        # Get week and year from the request body
+        data = request.get_json()
+        week_number = data.get("week_number")
+        year = data.get("year")
+
+
+        # Validate inputs
+        if not week_number or not year:
+            return jsonify({"error": "Week and year are required"}), 400
+
+        # Fetch all tenant names for the current user
+        tenant_names = [
+            tenant.tenant_name
+            for tenant in DomPurchaseInvoicesTenant.query.filter_by(user_id=current_user.id).all()
+        ]
+
+    
+        # Fetch all stores for those tenants from TrackingCategoryModel
+        store_details = TrackingCategoryModel.query.filter(
+            TrackingCategoryModel.tenant_name.in_(tenant_names)
+        ).all()
+
+        print(store_details)
+
+        # Prepare store data for matching
+        store_records = []
+        for store in store_details:
+            # Check for a matching record in InvoiceRecord
+            existing_record = InvoiceRecord.query.filter_by(
+                week_number=week_number,
+                year=year,
+                store_number=store.store_number
+            ).first()
+
+            # Determine status: green tick or red X
+            status = "✅" if existing_record else "❌"
+
+            if not store.store_number or not re.match(r"^\d{5}$", store.store_number):
+                continue
+                
+            # Append store record to the response list
+            store_records.append({
+                "store_name": store.tracking_category_option,  # Corrected column
+                "store_number": store.store_number,
+                "tenant_name": store.tenant_name,  # Use this as a placeholder if needed
+                "status": status
+            })
+
+        return jsonify({"data": store_records}), 200
+
+    except Exception as e:
+        print(f"Error loading invoice summary: {str(e)}")
+        return jsonify({"error": "Failed to load summary"}), 500
