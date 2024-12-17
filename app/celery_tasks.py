@@ -2934,7 +2934,8 @@ def combine_last_two_columns(df):
     return df
 
 
-@celery.task(bind=True)
+
+@shared_task(bind=True)
 def update_invoice_record_task(self, user_id):
     try:
         # Step 1: Retrieve user-specific Xero credentials
