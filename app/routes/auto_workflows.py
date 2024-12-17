@@ -22,6 +22,7 @@ def check_pre_processed_invoices():
     user = User.query.get(user_id)
     data, management_tenant_id = get_inbox_files_from_management_company(user)
 
+
     # Step 1: Identify live tenants and get expected store numbers for each tenant
     live_tenants = DomPurchaseInvoicesTenant.query.filter_by(user_id=user_id).all()
     expected_store_numbers = []
@@ -110,6 +111,7 @@ def check_pre_processed_invoices():
             'expected_invoice_count': len(expected_store_numbers),
             'missing_store_numbers': missing_stores
         }
+
 
     return jsonify({
         'status': 'success',
