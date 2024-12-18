@@ -56,6 +56,15 @@ from app.xero import (
 @shared_task(bind=True, name='app.celery_tasks.pre_process_dom_purchase_invoices_task')
 def pre_process_dom_purchase_invoices_task(self, user_id):
     user = User.query.get(user_id)
+
+    # Fetch the TaskStatus record for the current task
+    task_status = TaskStatus.query.filter_by(task_id=self.request.id).first()
+
+    if task_status:
+        task_status.status = 'in_progress'
+        task_status.result = "task_started"
+        db.session.commit()
+
     data, management_tenant_id = get_inbox_files_from_management_company(user)
 
     
@@ -220,6 +229,18 @@ def pre_process_dom_purchase_invoices_task(self, user_id):
                     print(f"File renamed to {new_file_name}")
                 else:
                     error_messages.append(f"Failed to rename file {file_name} to {new_file_name}")
+
+
+    if error_messages:
+        task_status.status = 'failed'
+        task_status.result = "\n".join(error_messages)
+        
+    else:
+        task_status.status = 'completed'
+        task_status.result = "Task completed successfully."
+    
+    db.session.commit()
+            
 
     return {
         'status': 'success' if not error_messages else 'error',

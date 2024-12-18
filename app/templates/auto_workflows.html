@@ -139,6 +139,19 @@ Auto Workflows
                                     </tbody>
                                 </table>
                             </div>
+                            <div id="pre-process-progress-container" class="progress mt-3" style="display:none;">
+                                <div id="pre-process-progress-bar" class="progress-bar progress-bar-striped" style="width: 0%;"></div>
+                            </div>
+                            <p id="pre-process-progress-text" class="mt-2">0% Complete</p>
+                            <p id="pre-process-task-status" class="mt-3 text-muted"></p>
+                            
+                            <!-- Pre-Process Task Errors -->
+                            <div id="pre-process-task-errors" class="alert alert-danger mt-3" style="display: none;">
+                                <h5>Task Errors:</h5>
+                                <ul id="pre-process-error-list" class="mb-0">
+                                    <!-- Error messages dynamically added here -->
+                                </ul>
+                            </div>
                         </div>
                     </div>
 
@@ -155,19 +168,20 @@ Auto Workflows
                                 <select id="week-selector" class="form-select">
                                     <option selected disabled>Select a week</option>
                                 </select>
-                            <div id="progress-container" class="progress mt-3" style="display:none;">
-                                <div id="progress-bar" class="progress-bar progress-bar-striped" style="width: 0%;"></div>
+                            <div id="process-progress-container" class="progress mt-3" style="display:none;">
+                                <div id="process-progress-bar" class="progress-bar progress-bar-striped" style="width: 0%;"></div>
                             </div>
-                            <p id="progress-text" class="mt-2">0% Complete</p>
-                            <p id="task-status" class="mt-3 text-muted"></p>
-
-                            <!-- Task Errors -->
-                            <div id="task-errors" class="alert alert-danger mt-3" style="display: none;">
+                            <p id="process-progress-text" class="mt-2">0% Complete</p>
+                            <p id="process-task-status" class="mt-3 text-muted"></p>
+                            
+                            <!-- Process Task Errors -->
+                            <div id="process-task-errors" class="alert alert-danger mt-3" style="display: none;">
                                 <h5>Task Errors:</h5>
-                                <ul id="error-list" class="mb-0">
+                                <ul id="process-error-list" class="mb-0">
                                     <!-- Error messages dynamically added here -->
                                 </ul>
                             </div>
+                                
                         </div>
                     </div>
 
@@ -465,6 +479,60 @@ Auto Workflows
     </style>
 
     <script>
+
+
+        // Check if there's an active task on page load
+        function checkActiveTask() {
+            fetch('/auto_workflows/active_task_status')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'no_active_task') {
+                        // No active tasks; enable buttons
+                        enablePurcahseInvoiceButtons()
+                        document.getElementById('process-task-status').textContent = 'Ready to process';
+                        document.getElementById('pre-process-task-status').textContent = 'Ready to process';
+                        return;
+                    }
+
+                    // Handle active task
+                    let taskType = (data.task_type === 'pre_process_dom_purchase_invoices') ? 'pre-process' : 'process';
+                    trackTaskProgress(data.task_id, taskType);
+                    disablePurcahseInvoiceButtons(); // Disable buttons while tracking
+                })
+                .catch(error => console.error('Error checking active task:', error));
+        }
+
+        // Disable specific workflow buttons
+        function disablePurcahseInvoiceButtons() {
+            // Select the Pre-Process Dom Purchase Invoices button and disable it
+            const preProcessButton = document.getElementById('pre-process-btn');
+            if (preProcessButton) {
+                preProcessButton.disabled = true;
+            }
+
+            // Select the Process Dom Purchase Invoices button and disable it
+            const processButton = document.getElementById('process-btn');
+            if (processButton) {
+                processButton.disabled = true;
+            }
+        }
+
+        // enable specific workflow buttons
+        function enablePurcahseInvoiceButtons() {
+            // Select the Pre-Process Dom Purchase Invoices button and disable it
+            const preProcessButton = document.getElementById('pre-process-btn');
+            if (preProcessButton) {
+                preProcessButton.disabled = false;
+            }
+
+            // Select the Process Dom Purchase Invoices button and disable it
+            const processButton = document.getElementById('process-btn');
+            if (processButton) {
+                processButton.disabled = false;
+            }
+        }
+
+
         function toggleList(listId) {
             const tenantList = document.getElementById(listId);
             const button = document.querySelector(`button[onclick="toggleList('${listId}')"]`); // Select the button that toggles this list
@@ -647,9 +715,8 @@ Auto Workflows
         window.onload = function() {
             fetchFileOverviewData();
             fetchDomPurchaseInvoiceLogs();
-            fetchDomSalesInvoiceLogs()
-
-
+            fetchDomSalesInvoiceLogs();
+            checkActiveTask();
         };
 
         setInterval(function() {
@@ -662,32 +729,34 @@ Auto Workflows
 
         function preProcessDomPurchaseInvoices() {
             // Disable the button and show the progress bar
-            document.getElementById('process-btn').disabled = true;
-            document.getElementById('task-status').innerHTML = "Task is running...";
-            document.getElementById('progress-container').style.display = "block";
+            disablePurcahseInvoiceButtons()
+            document.getElementById('pre-process-task-status').textContent = "Task is running...";
+            document.getElementById('pre-process-progress-container').style.display = "block";
             
             // Clear any previous errors
-            document.getElementById('task-errors').style.display = 'none';
-            document.getElementById('error-list').innerHTML = '';
+            const errorContainer = document.getElementById('pre-process-task-errors');
+            const errorList = document.getElementById('pre-process-error-list');
+            errorContainer.style.display = 'none';
+            errorList.innerHTML = '';
         
             // Send request to start Celery task
             fetch('/auto_workflows/pre_process_dom_purchase_invoices')
                 .then(response => response.json())
                 .then(data => {
                     if (data.task_id) {
-                        trackTaskProgress(data.task_id);
+                        trackTaskProgress(data.task_id, 'pre-process');
                     } else {
                         console.error('Error starting task:', data);
                         alert('Failed to start processing invoices.');
-                        document.getElementById('process-btn').disabled = false;
-                        document.getElementById('task-status').innerHTML = "Error starting task.";
+                        enablePurcahseInvoiceButtons()
+                        document.getElementById('pre-process-task-status').textContent = "Error starting task.";
                     }
                 })
                 .catch(error => {
                     console.error('Error starting task:', error);
                     alert('Failed to start processing invoices.');
-                    document.getElementById('process-btn').disabled = false;
-                    document.getElementById('task-status').innerHTML = "Error starting task.";
+                    enablePurcahseInvoiceButtons()
+                    document.getElementById('pre-process-task-status').textContent = "Error starting task.";
                 });
         }
 
@@ -699,27 +768,34 @@ Auto Workflows
                 return;
             }
 
-            document.getElementById('process-btn').disabled = true;
-            document.getElementById('task-status').innerHTML = "Task is running...";
-            document.getElementById('progress-container').style.display = "block";
+            disablePurcahseInvoiceButtons()
+            document.getElementById('process-task-status').textContent = "Task is running...";
+            document.getElementById('process-progress-container').style.display = "block";
+
+             // Clear any previous errors
+            const errorContainer = document.getElementById('process-task-errors');
+            const errorList = document.getElementById('process-error-list');
+            errorContainer.style.display = 'none';
+            errorList.innerHTML = '';
+
 
             fetch(`/auto_workflows/process_dom_purchase_invoices?week=${selectedWeek}`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.task_id) {
-                        startTask(data.task_id);
+                        startTask(data.task_id, 'process');
                     } else {
                         console.error('Error starting task:', data);
                         alert('Failed to start processing invoices.');
-                        document.getElementById('process-btn').disabled = false;
-                        document.getElementById('task-status').innerHTML = "Error starting task.";
+                        enablePurcahseInvoiceButtons()
+                        document.getElementById('process-task-status').textContent = "Error starting task.";
                     }
                 })
                 .catch(error => {
                     console.error('Error starting task:', error);
                     alert('Failed to start processing invoices.');
-                    document.getElementById('process-btn').disabled = false;
-                    document.getElementById('task-status').innerHTML = "Error starting task.";
+                    enablePurcahseInvoiceButtons()
+                    document.getElementById('process-task-status').textContent = "Error starting task.";
                 });
         }
 
@@ -736,31 +812,49 @@ Auto Workflows
                 .catch(error => console.error('Error processing DOM sales invoices:', error));
         }
 
-        function startTask(taskID) {
+        function startTask(taskID, taskType) {
             function checkTaskStatus() {
                 fetch('/auto_workflows/task_status/' + taskID)
                     .then(response => response.json())
                     .then(data => {
+                        const progressBar = document.getElementById(`${taskType}-progress-bar`);
+                        const progressText = document.getElementById(`${taskType}-progress-text`);
+                        const taskStatus = document.getElementById(`${taskType}-task-status`);
+                        const taskButton = document.getElementById(`${taskType}-btn`);
+
+                        if (!progressBar || !progressText || !taskStatus || !taskButton) {
+                            console.error(`Elements for task type '${taskType}' not found.`);
+                            return;
+                        }
+
                         var progress = data.progress || 0;
-                        document.getElementById('progress-bar').style.width = progress + '%';
-                        document.getElementById('progress-text').innerHTML = progress + '% Complete';
+                        progressBar.style.width = progress + '%';
+                        progressText.innerHTML = `${progress}% Complete`;
 
                         if (progress < 100) {
-                            setTimeout(checkTaskStatus, 200); // Poll every 2 seconds
+                            setTimeout(checkTaskStatus, 2000); // Poll every 2 seconds
                         } else {
-                            document.getElementById('process-btn').disabled = false; // Re-enable the button
-                            document.getElementById('task-status').innerHTML = "Task completed!";
+                            taskButton.disabled = false; // Re-enable the button
+                            taskStatus.innerHTML = data.state === 'SUCCESS' ? "Task completed!" : "Task failed.";
                         }
                     })
                     .catch(error => {
                         console.error('Error checking task status:', error);
-                        document.getElementById('task-status').innerHTML = "Error checking task status.";
-                        document.getElementById('process-btn').disabled = false; // Re-enable the button on error
+                        const taskStatus = document.getElementById(`${taskType}-task-status`);
+                        const taskButton = document.getElementById(`${taskType}-btn`);
+
+                        if (taskStatus) {
+                            taskStatus.innerHTML = "Error checking task status.";
+                        }
+                        if (taskButton) {
+                            taskButton.disabled = false; // Re-enable the button on error
+                        }
                     });
             }
 
             checkTaskStatus(); // Start polling the task status
         }
+
 
 
         function processInvoice(taskType) {
@@ -775,7 +869,7 @@ Auto Workflows
                 .then(response => response.json())
                 .then(data => {
                     if (data.task_id) {
-                        trackTaskProgress(data.task_id, button);
+                        trackTaskProgress(data.task_id, 'process');
                     } else {
                         button.textContent = 'Error starting task';
                         button.disabled = false;
@@ -788,35 +882,35 @@ Auto Workflows
                 });
         }
 
-        function trackTaskProgress(taskID) {
+        function trackTaskProgress(taskID, taskType) {
+            const progressContainer = document.getElementById(`${taskType}-progress-container`);
+            const progressBar = document.getElementById(`${taskType}-progress-bar`);
+            const progressText = document.getElementById(`${taskType}-progress-text`);
+            const taskStatus = document.getElementById(`${taskType}-task-status`);
+            const errorContainer = document.getElementById(`${taskType}-task-errors`);
+            const errorList = document.getElementById(`${taskType}-error-list`);
+
             function checkTaskStatus() {
                 fetch(`/auto_workflows/task_status/${taskID}`)
                     .then(response => response.json())
                     .then(data => {
-                        let progress = data.progress || 0;
-                        document.getElementById('progress-bar').style.width = `${progress}%`;
-                        document.getElementById('progress-text').textContent = `${progress}% Complete`;
-        
-                        // Update task status message if provided
+                        const progress = data.progress || 0;
+                        progressBar.style.width = `${progress}%`;
+                        progressText.textContent = `${progress}% Complete`;
+
                         if (data.message) {
-                            document.getElementById('task-status').textContent = data.message;
+                            taskStatus.textContent = data.message;
                         }
-        
+
                         if (data.state === 'SUCCESS' || data.state === 'FAILURE') {
-                            document.getElementById('process-btn').disabled = false;
-                            
-                            // Display errors if present
+                            enablePurcahseInvoiceButtons();
                             if (data.errors && data.errors.length > 0) {
-                                const errorContainer = document.getElementById('task-errors');
-                                const errorList = document.getElementById('error-list');
-                                errorList.innerHTML = ''; // Clear previous errors
-        
+                                errorList.innerHTML = '';
                                 data.errors.forEach(error => {
                                     const errorItem = document.createElement('li');
                                     errorItem.textContent = error;
                                     errorList.appendChild(errorItem);
                                 });
-        
                                 errorContainer.style.display = 'block';
                             }
                         } else {
@@ -825,13 +919,13 @@ Auto Workflows
                     })
                     .catch(error => {
                         console.error('Error checking task status:', error);
-                        document.getElementById('task-status').textContent = "Error checking task status.";
-                        document.getElementById('process-btn').disabled = false;
+                        taskStatus.textContent = "Error checking task status.";
                     });
             }
-        
+
             checkTaskStatus();
         }
+
 
 
         function displayErrors(errors) {
