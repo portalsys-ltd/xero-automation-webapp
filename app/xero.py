@@ -1843,6 +1843,19 @@ def get_invoices_and_credit_notes(user, tenants, contact_name):
                     # Loop through each invoice
                     for invoice in invoices.invoices:
                         invoice_id = invoice.invoice_id
+
+                        # Check if the invoice already exists in the database
+                        existing_invoice = SupplierInvoiceRecord.query.filter_by(
+                            invoice_id=invoice_id,
+                            date_of_invoice=invoice.date,
+                            invoice_number=invoice.invoice_number
+                        ).first()
+
+                        if existing_invoice and not existing_invoice.errors:
+                            add_log(f"Skipping existing invoice {invoice.invoice_number} for tenant {tenant_name}.", log_type="general", user_id=user.id)
+                            continue
+
+
                         add_log(f"Checking invoice {invoice.invoice_number} for tenant {tenant_name}.", log_type="general", user_id=user.id)
 
                         # Fetch the detailed invoice to access the line items
@@ -1880,6 +1893,18 @@ def get_invoices_and_credit_notes(user, tenants, contact_name):
                     # Loop through each credit note
                     for credit_note in credit_notes.credit_notes:
                         credit_note_id = credit_note.credit_note_id
+
+                        # Check if the credit note already exists in the database
+                        existing_credit_note = SupplierInvoiceRecord.query.filter_by(
+                            invoice_id=credit_note_id,
+                            date_of_invoice=credit_note.date,
+                            invoice_number=credit_note.credit_note_number
+                        ).first()
+
+                        if existing_credit_note and not existing_credit_note.errors:
+                            add_log(f"Skipping existing credit note {credit_note.credit_note_number} for tenant {tenant_name}.", log_type="general", user_id=user.id)
+                            continue
+                        
                         add_log(f"Checking credit note {credit_note.credit_note_number} for tenant {tenant_name}.", log_type="general", user_id=user.id)
 
                         # Fetch the detailed credit note to access the line items

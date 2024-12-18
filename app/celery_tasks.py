@@ -2083,7 +2083,7 @@ def process_eden_farm_task(self, user_id):
 
         new_record = SupplierInvoiceRecord(
             user_id=user.id,
-            store_name=data.get("Unknown"),
+            store_name=invoice["tenant_name"],
             invoice_type="Eden Farm",
             invoice_number=invoice["invoice_reference"],
             invoice_id=invoice['invoice_id'],
@@ -2108,7 +2108,7 @@ def process_eden_farm_task(self, user_id):
 
             new_record = SupplierInvoiceRecord(
                 user_id=user.id,
-                store_name=data.get("Unknown"),
+                store_name=invoice["tenant_name"],
                 invoice_type="Eden Farm",
                 invoice_number=credit_note["invoice_reference"],
                 invoice_id=credit_note['invoice_id'],
@@ -2134,7 +2134,7 @@ def process_eden_farm_task(self, user_id):
 
         new_record = SupplierInvoiceRecord(
             user_id=user.id,
-            store_name=data.get("Unknown"),
+            store_name=invoice["tenant_name"],
             invoice_type="Eden Farm",
             invoice_number=credit_note["invoice_reference"],
             invoice_id=credit_note['invoice_id'],
