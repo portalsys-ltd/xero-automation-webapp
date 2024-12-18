@@ -129,13 +129,18 @@ def get_xero_client_for_user(user):
 def refresh_xero_token(refresh_token, user):
     client_id = os.getenv("CLIENT_ID")
     client_secret = os.getenv("CLIENT_SECRET")
-    
+
     # Check if token is still valid
     current_time = time.time()
+    
     if user.xero_token_expires_at and user.xero_token_expires_at > current_time + 300:
         print(f"Token is still valid for user {user.id}, skipping refresh.")
         return user.xero_access_token  # Return the existing token
-    
+
+    # Handle the case where xero_token_expires_at is not set
+    if not user.xero_token_expires_at:
+        print(f"User {user.id} does not have a token expiration set. Proceeding with token refresh.")
+
     try:
         # Make a request to the Xero token endpoint to refresh the token
         response = requests.post(
