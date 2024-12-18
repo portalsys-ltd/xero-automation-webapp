@@ -133,12 +133,12 @@ def refresh_xero_token(refresh_token, user):
     # Check if token is still valid
     current_time = time.time()
     
-    if user.xero_token_expires_at and user.xero_token_expires_at > current_time + 300:
+    if user.token_expires_at and user.token_expires_at > current_time + 300:
         print(f"Token is still valid for user {user.id}, skipping refresh.")
         return user.xero_access_token  # Return the existing token
 
     # Handle the case where xero_token_expires_at is not set
-    if not user.xero_token_expires_at:
+    if not user.token_expires_at:
         print(f"User {user.id} does not have a token expiration set. Proceeding with token refresh.")
 
     try:
