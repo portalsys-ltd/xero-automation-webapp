@@ -265,6 +265,18 @@ class SupplierInvoiceRecord(db.Model):
 
 
 
+class TaskSchedule(db.Model):
+    __tablename__ = 'task_schedules'
+
+    id = db.Column(db.Integer, primary_key=True)
+    task_name = db.Column(db.String(100), unique=True, nullable=False)
+    schedule_type = db.Column(db.String(20), nullable=False, default='interval')  # 'interval' or 'crontab'
+    interval_minutes = db.Column(db.Integer, nullable=True)  # For interval scheduling
+    specific_time = db.Column(db.Time, nullable=True)  # For crontab-like scheduling
+    last_run = db.Column(db.DateTime, default=None)  # Last run time
+    next_run = db.Column(db.DateTime, default=None)  # Next run time
+    is_active = db.Column(db.Boolean, default=True)  # Enable/disable tasks
+    arguments = db.Column(db.String, nullable=True)  # Store arguments as a string
 
 
 

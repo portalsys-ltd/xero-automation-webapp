@@ -129,6 +129,13 @@ def get_xero_client_for_user(user):
 def refresh_xero_token(refresh_token, user):
     client_id = os.getenv("CLIENT_ID")
     client_secret = os.getenv("CLIENT_SECRET")
+    
+    # Check if token is still valid
+    current_time = time.time()
+    if user.xero_token_expires_at and user.xero_token_expires_at > current_time + 300:
+        print(f"Token is still valid for user {user.id}, skipping refresh.")
+        return user.xero_access_token  # Return the existing token
+    
     try:
         # Make a request to the Xero token endpoint to refresh the token
         response = requests.post(
@@ -1904,7 +1911,7 @@ def get_invoices_and_credit_notes(user, tenants, contact_name):
                         if existing_credit_note and not existing_credit_note.errors:
                             add_log(f"Skipping existing credit note {credit_note.credit_note_number} for tenant {tenant_name}.", log_type="general", user_id=user.id)
                             continue
-                        
+
                         add_log(f"Checking credit note {credit_note.credit_note_number} for tenant {tenant_name}.", log_type="general", user_id=user.id)
 
                         # Fetch the detailed credit note to access the line items

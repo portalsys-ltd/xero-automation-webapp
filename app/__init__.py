@@ -13,6 +13,10 @@ import os
 from werkzeug.security import generate_password_hash
 from flask import flash
 from flask_session import Session
+from celery.schedules import crontab
+from celery.schedules import schedule
+from datetime import datetime, timedelta
+
 
 
 # Initialize extensions
@@ -31,8 +35,6 @@ def make_celery(app):
     )
     celery.conf.update(app.config)
 
-    
-
     class ContextTask(celery.Task):
         def __call__(self, *args, **kwargs):
             with app.app_context():
@@ -40,7 +42,41 @@ def make_celery(app):
         
     celery.Task = ContextTask
     celery.autodiscover_tasks(['app.celery_tasks'])  # Ensure tasks are discovered
+
+    update_celery_beat_schedule(app, celery)
+
     return celery
+
+def update_celery_beat_schedule(app, celery):
+    """Dynamically load task schedules from the database into Celery beat."""
+    with app.app_context():
+        from app.models import TaskSchedule
+        task_schedules = TaskSchedule.query.filter_by(is_active=True).all()
+
+        beat_schedule = {}
+        for task in task_schedules:
+            # Parse arguments or use default
+            task_args = eval(task.arguments) if task.arguments else []
+
+            if task.schedule_type == 'interval':
+                # Interval scheduling
+                interval = timedelta(minutes=task.interval_minutes)
+                beat_schedule[task.task_name] = {
+                    "task": f"app.celery_tasks.{task.task_name}",
+                    "schedule": interval,
+                    "args": task_args,
+                }
+            elif task.schedule_type == 'crontab' and task.specific_time:
+                # Specific time scheduling
+                hour, minute, _ = map(int, task.specific_time.strftime('%H:%M:%S').split(':'))
+                beat_schedule[task.task_name] = {
+                    "task": f"app.celery_tasks.{task.task_name}",
+                    "schedule": crontab(hour=hour, minute=minute),
+                    "args": task_args,
+                }
+
+        celery.conf.CELERYBEAT_SCHEDULE = beat_schedule
+
 
 
 

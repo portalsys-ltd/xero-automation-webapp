@@ -51,3 +51,144 @@ CREATE TABLE supplier_invoice_record (
     triggered_by VARCHAR(50),
     date_of_invoice DATE NOT NULL
 );
+
+CREATE TABLE task_schedules (
+    id SERIAL PRIMARY KEY,
+    task_name VARCHAR(100) UNIQUE NOT NULL,
+    interval_minutes INT NOT NULL,
+    last_run TIMESTAMP DEFAULT NULL,
+    next_run TIMESTAMP DEFAULT NULL,
+    is_active BOOLEAN DEFAULT TRUE
+);
+
+INSERT INTO task_schedules (task_name, interval_minutes, last_run, next_run, is_active)
+VALUES
+    ('process_cocacola_task', 1440, NULL, '2024-12-19 11:30:00', TRUE), -- Runs daily at 11:30
+    ('process_textman_task', 1440, NULL, '2024-12-19 11:30:00', TRUE), -- Runs daily at 11:30
+    ('process_eden_farm_task', 1440, NULL, '2024-12-19 11:30:00', TRUE); -- Runs daily at 11:30
+
+
+
+-- Drop the old table if it exists
+DROP TABLE IF EXISTS task_schedules;
+
+-- Create the new table
+CREATE TABLE task_schedules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_name TEXT UNIQUE NOT NULL,
+    interval_minutes INTEGER NOT NULL,
+    last_run DATETIME DEFAULT NULL,
+    next_run DATETIME DEFAULT NULL,
+    is_active BOOLEAN DEFAULT 1
+);
+
+-- Insert initial data
+INSERT INTO task_schedules (task_name, interval_minutes, last_run, next_run, is_active)
+VALUES
+    ('process_cocacola_task', 1440, NULL, '2024-12-19 11:30:00', 1),
+    ('process_textman_task', 1440, NULL, '2024-12-19 11:30:00', 1),
+    ('process_eden_farm_task', 1440, NULL, '2024-12-19 11:30:00', 1);
+
+-- Verify data
+SELECT * FROM task_schedules;
+
+
+-- Update interval_minutes from 1440 to 1
+UPDATE task_schedules
+SET interval_minutes = 1
+WHERE interval_minutes = 1440;
+
+-- Verify the changes
+SELECT * FROM task_schedules;
+
+
+-- Drop the old table if it exists
+DROP TABLE IF EXISTS task_schedules;
+
+
+-- Drop the table if it already exists
+DROP TABLE IF EXISTS task_schedules;
+
+-- Create the new task_schedules table
+CREATE TABLE task_schedules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_name TEXT UNIQUE NOT NULL,
+    schedule_type TEXT NOT NULL DEFAULT 'interval', -- 'interval' or 'crontab'
+    interval_minutes INTEGER, -- For interval scheduling
+    specific_time TIME, -- For crontab-like scheduling
+    last_run DATETIME DEFAULT NULL, -- Last run time
+    next_run DATETIME DEFAULT NULL, -- Next run time
+    is_active BOOLEAN DEFAULT 1, -- Enable/disable tasks
+    arguments TEXT -- Store arguments as a string
+);
+
+
+-- Insert tasks into the task_schedules table
+
+-- Task that repeats every 1 minute
+INSERT INTO task_schedules (task_name, schedule_type, interval_minutes, specific_time, arguments, is_active)
+VALUES
+    ('process_cocacola_task', 'interval', 1, NULL, '[1]', 1);
+
+-- Task that runs at 23:42
+INSERT INTO task_schedules (task_name, schedule_type, interval_minutes, specific_time, arguments, is_active)
+VALUES
+    ('process_textman_task', 'crontab', NULL, '23:32:00', '[1]', 1);
+
+
+-- Task that runs at 23:42
+INSERT INTO task_schedules (task_name, schedule_type, interval_minutes, specific_time, arguments, is_active)
+VALUES
+    ('process_eden_farm_task', 'crontab', NULL, '23:32:00', '[1]', 1);
+
+
+
+-- Verify the data
+SELECT * FROM task_schedules;
+
+
+-- Task that repeats every 1 minute
+INSERT INTO task_schedules (task_name, schedule_type, interval_minutes, specific_time, arguments, is_active)
+VALUES
+    ('process_cocacola_task', 'interval', 1, NULL, '[1]', TRUE);
+
+-- Task that runs at 23:42
+INSERT INTO task_schedules (task_name, schedule_type, interval_minutes, specific_time, arguments, is_active)
+VALUES
+    ('process_textman_task', 'crontab', NULL, '23:42:00', '[2]', TRUE);
+
+-- Task that repeats every 1 minute
+INSERT INTO task_schedules (task_name, schedule_type, interval_minutes, specific_time, arguments, is_active)
+VALUES
+    ('process_eden_farm_task', 'interval', 1, NULL, '[3]', TRUE);
+
+
+-- Task that runs at 23:42
+INSERT INTO task_schedules (task_name, schedule_type, interval_minutes, specific_time, arguments, is_active)
+VALUES
+    ('process_textman_task', 'crontab', NULL, '23:00:00', '[1]', TRUE);
+
+-- Task that runs at 23:42
+INSERT INTO task_schedules (task_name, schedule_type, interval_minutes, specific_time, arguments, is_active)
+VALUES
+    ('process_cocacola_task', 'crontab', NULL, '23:00:00', '[1]', TRUE);
+
+-- Task that runs at 23:42
+INSERT INTO task_schedules (task_name, schedule_type, interval_minutes, specific_time, arguments, is_active)
+VALUES
+    ('process_eden_farm_task', 'crontab', NULL, '23:00:00', '[1]', TRUE);
+
+-- Task that runs at 23:42
+INSERT INTO task_schedules (task_name, schedule_type, interval_minutes, specific_time, arguments, is_active)
+VALUES
+    ('process_textman_task', 'crontab', NULL, '23:00:00', '[2]', TRUE);
+
+-- Task that runs at 23:42
+INSERT INTO task_schedules (task_name, schedule_type, interval_minutes, specific_time, arguments, is_active)
+VALUES
+    ('process_cocacola_task', 'crontab', NULL, '23:00:00', '[2]', TRUE);
+
+-- Task that runs at 23:42
+INSERT INTO task_schedules (task_name, schedule_type, interval_minutes, specific_time, arguments, is_active)
+VALUES
+    ('process_eden_farm_task', 'crontab', NULL, '23:00:00', '[2]', TRUE);
