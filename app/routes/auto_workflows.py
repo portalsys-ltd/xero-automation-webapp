@@ -226,35 +226,52 @@ def eden_farm_process_invoices_route():
 def active_task_status():
     user_id = current_user.id
 
-    # Query the most recent active task for the user, restricted to specific task types
-    active_task = (
+    # Query the most recent tasks for the user, restricted to specific task types
+    tasks = (
         TaskStatus.query.filter(
             TaskStatus.user_id == user_id,
             TaskStatus.task_type.in_(['pre_process_dom_purchase_invoices', 'process_dom_purchase']),  # Filter by task types
-            TaskStatus.status.in_(['in_progress', 'failed'])  # Only in-progress or pending tasks
+            TaskStatus.status.in_(['in_progress', 'failed', 'completed'])  # Include relevant statuses
         )
         .order_by(TaskStatus.created_at.desc())  # Order by most recent
-        .limit(1)
-        .first()
+        .all()
     )
 
-    if active_task and active_task.status in ['in_progress', 'pending', 'failed']:
-        # Check the real-time task status from Celery
-        task = pre_process_dom_purchase_invoices_task.AsyncResult(active_task.task_id)
-        if task.state in ['SUCCESS', 'FAILURE']:
-            # Update task status in the database
-            active_task.status = 'completed' if task.state == 'SUCCESS' else 'failed'
-            db.session.commit()
+    if not tasks:
+        return jsonify({'status': 'no_active_task'})
 
+    # Initialize variables to track the most recent tasks by status
+    most_recent_completed = None
+    most_recent_failed_or_in_progress = None
+
+    # Iterate through tasks to find the most recent ones for relevant statuses
+    for task in tasks:
+        if task.status == 'completed' and not most_recent_completed:
+            most_recent_completed = task
+        elif task.status in ['in_progress', 'failed'] and not most_recent_failed_or_in_progress:
+            most_recent_failed_or_in_progress = task
+
+        # If we have both conditions satisfied, we can stop checking further
+        if most_recent_completed and most_recent_failed_or_in_progress:
+            break
+
+    # If there's a completed task that is more recent than any failed or in-progress task, return no active task
+    if (most_recent_completed and most_recent_failed_or_in_progress and 
+            most_recent_completed.created_at > most_recent_failed_or_in_progress.created_at):
+        return jsonify({'status': 'no_active_task'})
+
+    # Otherwise, return the most recent failed or in-progress task
+    if most_recent_failed_or_in_progress:
         return jsonify({
-            'task_id': active_task.task_id,
-            'task_type': active_task.task_type,
-            'status': active_task.status,
-            'progress': task.info.get('progress', 0) if task.state == 'PROGRESS' else 100 if task.state == 'SUCCESS' else 0,
-            'message': task.info.get('message', 'Task is in progress...') if task.state == 'PROGRESS' else 'Task completed.' if task.state == 'SUCCESS' else 'Task failed.',
-            'state': task.state,
+            'task_id': most_recent_failed_or_in_progress.task_id,
+            'task_type': most_recent_failed_or_in_progress.task_type,
+            'status': most_recent_failed_or_in_progress.status,
+            'progress': 0 if most_recent_failed_or_in_progress.status == 'failed' else most_recent_failed_or_in_progress.progress,
+            'message': 'Task failed.' if most_recent_failed_or_in_progress.status == 'failed' else 'Task is in progress...',
+            'state': 'FAILURE' if most_recent_failed_or_in_progress.status == 'failed' else 'PROGRESS',
         })
 
+    # If no relevant tasks are found, return no active task
     return jsonify({'status': 'no_active_task'})
 
 
