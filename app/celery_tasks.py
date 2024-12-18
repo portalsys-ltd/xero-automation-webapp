@@ -251,6 +251,16 @@ def pre_process_dom_purchase_invoices_task(self, user_id):
 @shared_task(bind=True, name='app.celery_tasks.process_dom_purchase_invoices_task')
 def process_dom_purchase_invoices_task(self, user_id, week):
 
+    # Fetch the TaskStatus record for the current task
+    task_status = TaskStatus.query.filter_by(task_id=self.request.id).first()
+
+    if task_status:
+        task_status.status = 'in_progress'
+        task_status.result = "task_started"
+    
+
+    task_status = TaskStatus.query.filter_by(task_id=self.request.id).first()
+
     # Load tracking codes from the database
     tracking_codes = {}
     categories = TrackingCategoryModel.query.filter_by(user_id=user_id).all()
@@ -526,11 +536,17 @@ def process_dom_purchase_invoices_task(self, user_id, week):
                     # Log the error and raise an exception to stop the task
                     error_message = f"Store account code not found for nominal code {nominal_code} for user ID {user_id}."
                     add_log(error_message, log_type="errors", user_id=user_id)
+                    task_status.status = 'failed'
+                    task_status.result = error_message
+                    db.session.commit()
                     raise Exception(error_message)  # Stop the task with an error
             else:
                 # Log the error and raise an exception to stop the task
                 error_message = f"Nominal code {nominal_code} not found in the database for user ID {user_id}."
                 add_log(error_message, log_type="errors", user_id=user_id)
+                task_status.status = 'failed'
+                task_status.result = error_message
+                db.session.commit()
                 raise Exception(error_message)  # Stop the task with an error
             
             # Create line item tracking
@@ -660,6 +676,11 @@ def process_dom_purchase_invoices_task(self, user_id, week):
     add_log(f"Dom purchase invoice processing completed for all tenants", log_type="general", user_id=user_id)
 
     self.update_state(state='SUCCESS', meta={'current': total_files, 'total': total_files})
+
+    task_status.status = 'completed'
+    task_status.result = "Task completed successfully."
+    db.session.commit()
+
     return {'current': total_files, 'total': total_files, 'status': 'Task completed!'}
 
 
@@ -1130,8 +1151,17 @@ def process_dom_purchase_invoices_task_OLD(self, user_id):
 
 @shared_task(bind=True)
 def process_dom_sales_invoices_task(self, user_id):
+
     # Fetch the user from the database
     user = User.query.get(user_id)
+
+    # Fetch the TaskStatus record for the current task
+    task_status = TaskStatus.query.filter_by(task_id=self.request.id).first()
+
+    if task_status:
+        task_status.status = 'in_progress'
+        task_status.result = "task_started"
+        db.session.commit()
 
     # Fetch the data for the current user's company (including tenant info)
     tenant_data = fetch_dom_management_company_data(user)
@@ -1176,6 +1206,12 @@ def process_dom_sales_invoices_task(self, user_id):
     except Exception as e:
         # If there's an error in finding contacts, log the error and stop the task
         add_log(f"Error in finding contacts: {str(e)}", log_type="error", user_id=user_id)
+        error_message = str(e)
+
+        task_status.status = 'failed'
+        task_status.result = error_message
+        db.session.commit()
+
         return f"Task unsuccessful: {str(e)}"
     
 
@@ -1351,6 +1387,10 @@ def process_dom_sales_invoices_task(self, user_id):
                     add_log(f"Error moving file '{original_file_name}' to Rejected folder: {str(e)}", log_type="error", user_id=user_id)
 
                 # Raise an exception to stop the task
+                task_status.status = 'failed'
+                task_status.result = error_message
+                db.session.commit()
+
                 raise Exception(f"Missing store numbers found. Task failed. \n{error_message}")
 
             # Group sales and mileage line items by tracking_option_id
@@ -1478,6 +1518,10 @@ def process_dom_sales_invoices_task(self, user_id):
                 add_log(f"File {file['file_name']} moved to Processed folder.", log_type="general", user_id=user_id)
             except Exception as e:
                 add_log(f"Error moving file {file['file_name']} to Processed folder: {str(e)}", log_type="error", user_id=user_id)
+
+    task_status.status = 'completed'
+    task_status.result = "Task completed successfully."
+    db.session.commit()
 
     return "Processing complete"
 
@@ -1707,7 +1751,7 @@ def process_cocacola_task(self, user_id):
     tenant_names = [tenant.tenant_name for tenant in tenants]
 
     # Fetch Coca-Cola invoices without tracking categories for these tenants
-    cocacola_invoices= get_invoices_and_credit_notes(user, tenant_names, "CocaCola")
+    cocacola_invoices= get_invoices_and_credit_notes(user, tenant_names, "Coca-Cola")
 
     # Calculate total invoices to process
     total_invoices = len(cocacola_invoices)
@@ -1718,18 +1762,35 @@ def process_cocacola_task(self, user_id):
 
     # Track errors
     errors = []
-
-    print(total_invoices)
     
-
     # Process the invoices for each tenant
     for invoice in invoices_to_process:
+
+        print(invoice["invoice_reference"])
+        print(invoice['invoice_id'])
+        print(invoice["invoice_date"])
+
         data = extract_coca_cola_invoice_data(user, invoice)
         
         # Check if there are any errors
         invoice_errors = data.get("errors", [])
         if invoice_errors:
             errors.extend(invoice_errors)
+
+            # Store invoice with errors in SupplierInvoiceRecord
+            new_record = SupplierInvoiceRecord(
+                user_id=user.id,
+                store_name=invoice["tenant_name"],
+                invoice_type="Coca-Cola",
+                invoice_number=invoice["invoice_reference"],
+                invoice_id=invoice['invoice_id'],
+                errors=', '.join(invoice_errors),
+                triggered_by="manual",  # Or "manual" if triggered manually
+                date_of_invoice=invoice["invoice_date"]
+            )
+            db.session.add(new_record)
+            db.session.commit()
+
             add_log(f"Error processing invoice {invoice['invoice_id']}: {', '.join(invoice_errors)}", log_type="error", user_id=user.id)
             continue  # Skip this invoice due to errors
 
@@ -1740,6 +1801,19 @@ def process_cocacola_task(self, user_id):
         else:
             # Call the function to assign tracking code to the invoice
             error = assign_tracking_code_to_invoice(data, user)
+        
+        # Store invoice with errors in SupplierInvoiceRecord
+        new_record = SupplierInvoiceRecord(
+            user_id=user.id,
+            store_name=invoice["tenant_name"],
+            invoice_type="Coca-Cola",
+            invoice_number=invoice["invoice_reference"],
+            invoice_id=invoice['invoice_id'],
+            triggered_by="manual",  # Or "manual" if triggered manually
+            date_of_invoice=invoice["invoice_date"]
+        )
+        db.session.add(new_record)
+        db.session.commit()
 
         # Update progress after processing each invoice
         processed_invoices += 1
@@ -1754,6 +1828,21 @@ def process_cocacola_task(self, user_id):
         credit_note_errors = data.get("errors", [])
         if credit_note_errors:
             errors.extend(credit_note_errors)
+
+            # Store invoice with errors in SupplierInvoiceRecord
+            new_record = SupplierInvoiceRecord(
+                user_id=user.id,
+                store_name=invoice["tenant_name"],
+                invoice_type="Coca-Cola",
+                invoice_number=invoice["invoice_reference"],
+                invoice_id=invoice['invoice_id'],
+                errors=', '.join(invoice_errors),
+                triggered_by="manual",  # Or "manual" if triggered manually
+                date_of_invoice=invoice["invoice_date"]
+            )
+            db.session.add(new_record)
+            db.session.commit()
+
             add_log(f"Error processing credit note {credit_note['invoice_id']}: {', '.join(credit_note_errors)}", log_type="error", user_id=user.id)
             continue  # Skip this credit note due to errors
 
@@ -1766,6 +1855,19 @@ def process_cocacola_task(self, user_id):
             # Call the function to assign tracking code to the credit memo
             error = assign_tracking_code_to_credit_note(data, user)
             add_log(f"Credit note {credit_note['invoice_id']} is a valid credit memo.", log_type="general", user_id=user.id)
+        
+        new_record = SupplierInvoiceRecord(
+            user_id=user.id,
+            store_name=invoice["tenant_name"],
+            invoice_type="Coca-Cola",
+            invoice_number=invoice["invoice_reference"],
+            invoice_id=invoice['invoice_id'],
+            triggered_by="manual",  # Or "manual" if triggered manually
+            date_of_invoice=invoice["invoice_date"]
+        )
+        db.session.add(new_record)
+        db.session.commit()
+
 
         # Update progress after processing each invoice
         processed_invoices += 1
@@ -1823,6 +1925,20 @@ def process_textman_task(self, user_id):
         invoice_errors = data.get("errors", [])
         if invoice_errors:
             errors.extend(invoice_errors)
+
+            new_record = SupplierInvoiceRecord(
+                user_id=user.id,
+                store_name=invoice["tenant_name"],
+                invoice_type="Text Management",
+                invoice_number=invoice["invoice_reference"],
+                invoice_id=invoice['invoice_id'],
+                errors=', '.join(invoice_errors),
+                triggered_by="manual",
+                date_of_invoice=invoice["invoice_date"]
+            )
+            db.session.add(new_record)
+            db.session.commit()
+
             add_log(f"Error processing Textman invoice {invoice['invoice_id']}: {', '.join(invoice_errors)}", log_type="error", user_id=user.id)
             continue  # Skip this invoice due to errors
 
@@ -1833,6 +1949,18 @@ def process_textman_task(self, user_id):
         else:
             # Call the function to assign tracking code to the invoice
             error = assign_tracking_code_to_invoice(data, user)
+
+        new_record = SupplierInvoiceRecord(
+            user_id=user.id,
+            store_name=invoice["tenant_name"],
+            invoice_type="Text Management",
+            invoice_number=invoice["invoice_reference"],
+            invoice_id=invoice['invoice_id'],
+            triggered_by="manual",
+            date_of_invoice=invoice["invoice_date"]
+        )
+        db.session.add(new_record)
+        db.session.commit()
 
         # Log progress for this invoice
         processed_invoices += 1
@@ -1856,6 +1984,20 @@ def process_textman_task(self, user_id):
         else:
             # Call the function to assign tracking code to the credit note
             error = assign_tracking_code_to_credit_note(data, user)
+
+    
+
+        new_record = SupplierInvoiceRecord(
+            user_id=user.id,
+            store_name=invoice["tenant_name"],
+            invoice_type="Text Management",
+            invoice_number=invoice["invoice_reference"],
+            invoice_id=invoice['invoice_id'],
+            triggered_by="manual",
+            date_of_invoice=invoice["invoice_date"]
+        )
+        db.session.add(new_record)
+        db.session.commit()
 
         # Log progress for this credit note
         processed_invoices += 1
@@ -1914,6 +2056,20 @@ def process_eden_farm_task(self, user_id):
         invoice_errors = data.get("errors", [])
         if invoice_errors:
             errors.extend(invoice_errors)
+
+            new_record = SupplierInvoiceRecord(
+                user_id=user.id,
+                store_name=invoice["tenant_name"],
+                invoice_type="Eden Farm",
+                invoice_number=invoice["invoice_reference"],
+                invoice_id=invoice['invoice_id'],
+                errors=', '.join(invoice_errors),
+                triggered_by="manual",
+                date_of_invoice=invoice["invoice_date"]
+            )
+            db.session.add(new_record)
+            db.session.commit()
+
             add_log(f"Error processing Eden Farm invoice {invoice['invoice_id']}: {', '.join(invoice_errors)}", log_type="error", user_id=user.id)
             continue  # Skip this invoice due to errors
 
@@ -1924,6 +2080,18 @@ def process_eden_farm_task(self, user_id):
         else:
             # Call the function to assign tracking code to the invoice
             error = assign_tracking_code_to_invoice(data, user)
+
+        new_record = SupplierInvoiceRecord(
+            user_id=user.id,
+            store_name=data.get("Unknown"),
+            invoice_type="Eden Farm",
+            invoice_number=invoice["invoice_reference"],
+            invoice_id=invoice['invoice_id'],
+            triggered_by="manual",
+            date_of_invoice=invoice["invoice_date"]
+        )
+        db.session.add(new_record)
+        db.session.commit()
 
         # Update progress after processing each invoice
         processed_invoices += 1
@@ -1937,6 +2105,20 @@ def process_eden_farm_task(self, user_id):
         credit_note_errors = data.get("errors", [])
         if credit_note_errors:
             errors.extend(credit_note_errors)
+
+            new_record = SupplierInvoiceRecord(
+                user_id=user.id,
+                store_name=data.get("Unknown"),
+                invoice_type="Eden Farm",
+                invoice_number=credit_note["invoice_reference"],
+                invoice_id=credit_note['invoice_id'],
+                errors=', '.join(credit_note_errors),
+                triggered_by="manual",
+                date_of_invoice=credit_note["invoice_date"]
+            )
+            db.session.add(new_record)
+            db.session.commit()
+
             add_log(f"Error processing Eden Farm credit note {credit_note['invoice_id']}: {', '.join(credit_note_errors)}", log_type="error", user_id=user.id)
             continue  # Skip this credit note due to errors
 
@@ -1948,6 +2130,19 @@ def process_eden_farm_task(self, user_id):
             # Call the function to assign tracking code to the credit memo
             error = assign_tracking_code_to_credit_note(data, user)
             add_log(f"Eden Farm credit note {credit_note['invoice_id']} is a valid credit memo.", log_type="general", user_id=user.id)
+
+
+        new_record = SupplierInvoiceRecord(
+            user_id=user.id,
+            store_name=data.get("Unknown"),
+            invoice_type="Eden Farm",
+            invoice_number=credit_note["invoice_reference"],
+            invoice_id=credit_note['invoice_id'],
+            triggered_by="manual",
+            date_of_invoice=credit_note["invoice_date"]
+        )
+        db.session.add(new_record)
+        db.session.commit()
 
         # Update progress after processing each credit note
         processed_invoices += 1

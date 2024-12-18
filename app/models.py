@@ -232,6 +232,7 @@ class TaskStatus(db.Model):
     task_type = db.Column(db.String(50), nullable=False)  # Type of task (e.g., 'recharging', 'uploading')
     status = db.Column(db.String(50), default='pending')  # Status: pending, in_progress, completed, failed
     result = db.Column(db.Text, nullable=True)  # Result or error message
+    progress = db.Column(db.Integer, default=0)  # New column for progress
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -246,6 +247,22 @@ class InvoiceRecord(db.Model):
     store_number = db.Column(db.String(20), nullable=False)  # Store number (e.g., S11111)
     store_name = db.Column(db.String(100), nullable=False)   # Store name
     tenant_name = db.Column(db.String(100), nullable=False)  # Tenant name
+
+
+class SupplierInvoiceRecord(db.Model):
+    __tablename__ = 'supplier_invoice_record'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.Integer, nullable=True)  # Allow NULL
+    store_name = db.Column(db.String(255), nullable=True)  # Allow NULL
+    invoice_type = db.Column(db.String(100), nullable=True)  # Allow NULL
+    invoice_number = db.Column(db.String(100), nullable=False)  # Keep NOT NULL
+    invoice_id = db.Column(db.String(100), nullable=True)  # Allow NULL
+    errors = db.Column(db.Text, nullable=True)  # Allow NULL
+    run_time = db.Column(db.DateTime, default=datetime.utcnow, nullable=True)  # Allow NULL
+    triggered_by = db.Column(db.String(50), nullable=True)  # Allow NULL
+    date_of_invoice = db.Column(db.Date, nullable=False)  # Keep NOT NULL
+
 
 
 

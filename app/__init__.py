@@ -101,12 +101,15 @@ def create_app(config_name=None):
     from app.routes.logs import logs_bp  # Import the logs blueprint
     from app.routes.recharging import recharging_bp
     from app.routes.auto_workflows import auto_workflows_bp
+    from app.routes.scheduled_tasks import scheduled_tasks_bp
+
     app.register_blueprint(recharging_bp)
     app.register_blueprint(auto_workflows_bp)
     app.register_blueprint(logs_bp, url_prefix='/logs')
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(xero_bp)  # Xero API routes
+    app.register_blueprint(scheduled_tasks_bp)  
 
 
     return app

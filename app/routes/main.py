@@ -143,6 +143,12 @@ def auto_workflows():
     return render_template('auto_workflows.html')
 
 
+@main_bp.route('/scheduled_tasks')
+@user_login_required  # Protect the home route
+def scheduled_tasks():
+    return render_template('scheduled_tasks.html')
+
+
 # =======================================================================================
 #                                    DATA SETTINGS
 # =======================================================================================

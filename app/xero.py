@@ -11,8 +11,7 @@ from xero_python.api_client.oauth2 import OAuth2Token
 import json
 import time
 from functools import wraps
-from app.models import XeroTenant, Company, DomPurchaseInvoicesTenant, StoreAccountCodes, TrackingCategoryModel, InvoiceRecord
-from enum import Enum
+from app.models import XeroTenant, Company, DomPurchaseInvoicesTenant, StoreAccountCodes, TrackingCategoryModel, InvoiceRecord, SupplierInvoiceRecord
 from datetime import datetime, timedelta
 import pandas as pd
 from decimal import Decimal, ROUND_HALF_UP
@@ -128,8 +127,8 @@ def get_xero_client_for_user(user):
     return api_client, xero_app
 
 def refresh_xero_token(refresh_token, user):
-    client_id = current_app.config.get("CLIENT_ID")
-    client_secret = current_app.config.get("CLIENT_SECRET")
+    client_id = os.getenv("CLIENT_ID")
+    client_secret = os.getenv("CLIENT_SECRET")
     try:
         # Make a request to the Xero token endpoint to refresh the token
         response = requests.post(
@@ -819,6 +818,96 @@ def aggregate_auto_workflows_data(user):
         "eden_farm_tenants": tenant_file_data["eden_farm_tenants"],
         "text_man_tenants": tenant_file_data["text_man_tenants"]
     })
+
+
+@xero_bp.route('/scheduled_workflows_counts')
+def get_supplier_invoices_workflow_counts(user):
+    api_client, xero_app = get_xero_client_for_user(user)
+    accounting_api = AccountingApi(api_client)
+
+    tenants = XeroTenant.query.filter_by(user_id=user.id).all()
+
+    # Initialize counts
+    supplier_invoices_count = {"coca_cola": 0, "eden_farm": 0, "text_man": 0}
+
+    # Get allowed tenants for the current user session
+    if 'user_id' in session:
+        allowed_tenants = [tenant.tenant_name for tenant in DomPurchaseInvoicesTenant.query.filter_by(user_id=session['user_id']).all()]
+        add_log(f"Allowed tenants for user {session['user_id']}: {allowed_tenants}", log_type="general")
+    else:
+        allowed_tenants = []
+        add_log("No allowed tenants found for the user session.", log_type="errors")
+
+    for connection in tenants:
+        # Check if tenant is allowed
+        if connection.tenant_type == "ORGANISATION" and connection.tenant_name in allowed_tenants:
+            xero_tenant_id = connection.tenant_id
+            try:
+                # Fetch supplier invoices
+                invoices = accounting_api.get_invoices(
+                    xero_tenant_id,
+                    where='(Contact.Name.Contains("Coca-Cola") OR Contact.Name.Contains("Eden Farm") OR Contact.Name.Contains("Text Management")) AND AmountPaid == 0 AND AmountDue > 0 AND Status == "AUTHORISED"'
+                )
+
+                # Fetch credit notes
+                credit_notes = accounting_api.get_credit_notes(
+                    xero_tenant_id,
+                    where='(Contact.Name.Contains("Coca-Cola") OR Contact.Name.Contains("Eden Farm") OR Contact.Name.Contains("Text Management")) AND Total > 0 AND Status == "AUTHORISED"'
+                )
+
+                # Count supplier invoices
+                for invoice in invoices.invoices:
+                    contact_name = invoice.contact.name.lower()
+                    invoice_id = invoice.invoice_id
+                    invoice_date = invoice.date
+
+                    # Check if the invoice exists in SupplierInvoiceRecord
+                    existing_record = SupplierInvoiceRecord.query.filter_by(
+                        invoice_id=invoice_id,
+                        errors=None,
+                        date_of_invoice=invoice_date
+                    ).first()
+
+                    if not existing_record:
+                        if "coca-cola" in contact_name:
+                            supplier_invoices_count["coca_cola"] += 1
+                        elif "eden farm" in contact_name:
+                            supplier_invoices_count["eden_farm"] += 1
+                        elif "text management" in contact_name:
+                            supplier_invoices_count["text_man"] += 1
+
+                # Count credit notes
+                for credit_note in credit_notes.credit_notes:
+                    contact_name = credit_note.contact.name.lower()
+                    credit_note_id = credit_note.credit_note_id
+                    credit_note_date = credit_note.date
+
+                    # Check if the credit note exists in SupplierInvoiceRecord
+                    existing_record = SupplierInvoiceRecord.query.filter_by(
+                        invoice_id=credit_note_id,
+                        errors=None,
+                        date_of_invoice=credit_note_date
+                    ).first()
+
+                    if not existing_record:
+                        if "coca-cola" in contact_name:
+                            supplier_invoices_count["coca_cola"] += 1
+                        elif "eden farm" in contact_name:
+                            supplier_invoices_count["eden_farm"] += 1
+                        elif "text management" in contact_name:
+                            supplier_invoices_count["text_man"] += 1
+
+            except Exception as e:
+                add_log(f"Error fetching invoices or credit notes for tenant {connection.tenant_name}: {e}", log_type="error")
+
+    # Return the counts
+    return jsonify({
+        "coca_cola": supplier_invoices_count["coca_cola"],
+        "eden_farm": supplier_invoices_count["eden_farm"],
+        "text_man": supplier_invoices_count["text_man"]
+    })
+
+
 
 def get_inbox_files_from_management_company(user):
     api_client, xero_app = get_xero_client_for_user(user)
@@ -1768,8 +1857,10 @@ def get_invoices_and_credit_notes(user, tenants, contact_name):
                             all_invoices_and_credit_notes.append({
                                 'tenant_id': xero_tenant_id,
                                 'invoice_id': invoice_id,
+                                'invoice_date': invoice.date,
+                                'invoice_reference': invoice.invoice_number,
                                 'tenant_name': tenant_name,
-                                'xero_type': "invoice"
+                                'xero_type': "invoice",
                             })
 
                 except AccountingBadRequestException as e:
@@ -1804,6 +1895,8 @@ def get_invoices_and_credit_notes(user, tenants, contact_name):
                                 'tenant_id': xero_tenant_id,
                                 'invoice_id': credit_note_id,
                                 'tenant_name': tenant_name,
+                                'invoice_date': invoice.date,
+                                'invoice_reference': invoice.invoice_number,
                                 'xero_type': "credit_note"
                             })
 

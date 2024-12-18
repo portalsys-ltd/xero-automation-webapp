@@ -1,0 +1,319 @@
+{% extends "base.html" %}
+
+{% block title %}
+Scheduled Tasks
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">Scheduled Tasks</h1>
+
+    <!-- Navigation Tabs -->
+    <ul class="nav nav-tabs" id="scheduledTasksTabs" role="tablist">
+        <li class="nav-item">
+            <a class="nav-link active" id="overview-tab" data-toggle="tab" href="#overview" role="tab" aria-controls="overview" aria-selected="true">Overview</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="coca-cola-tab" data-toggle="tab" href="#coca-cola" role="tab" aria-controls="coca-cola" aria-selected="false">Coca Cola</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="eden-farm-tab" data-toggle="tab" href="#eden-farm" role="tab" aria-controls="eden-farm" aria-selected="false">Eden Farm</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="text-man-tab" data-toggle="tab" href="#text-man" role="tab" aria-controls="text-man" aria-selected="false">Text Man</a>
+        </li>
+    </ul>
+
+    <!-- Tab Content -->
+    <div class="tab-content mt-4" id="scheduledTasksTabContent">
+
+        <!-- Overview Tab -->
+        <div class="tab-pane fade show active" id="overview" role="tabpanel" aria-labelledby="overview-tab">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h4>Scheduled Tasks Overview</h4>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <h5>Coca Cola</h5>
+                            <p><strong>Invoices to Process:</strong> <span id="coca-cola-invoices-count">0</span></p>
+                        </div>
+                        <div class="col-md-4">
+                            <h5>Eden Farm</h5>
+                            <p><strong>Invoices to Process:</strong> <span id="eden-farm-invoices-count">0</span></p>
+                        </div>
+                        <div class="col-md-4">
+                            <h5>Text Man</h5>
+                            <p><strong>Invoices to Process:</strong> <span id="text-man-invoices-count">0</span></p>
+                        </div>
+                    </div>
+                    <hr>
+                    <h5>Last Run Details</h5>
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Invoice Type</th>
+                                <th>Last Run Time</th>
+                                <th>Status</th>
+                                <th>Next Scheduled Run</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Coca Cola</td>
+                                <td id="coca-cola-last-run">N/A</td>
+                                <td id="coca-cola-errors">N/A</td>
+                                <td id="coca-cola-next-run">N/A</td>
+                            </tr>
+                            <tr>
+                                <td>Eden Farm</td>
+                                <td id="eden-farm-last-run">N/A</td>
+                                <td id="eden-farm-errors">N/A</td>
+                                <td id="eden-farm-next-run">N/A</td>
+                            </tr>
+                            <tr>
+                                <td>Text Man</td>
+                                <td id="text-man-last-run">N/A</td>
+                                <td id="text-man-errors">N/A</td>
+                                <td id="text-man-next-run">N/A</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Coca Cola Tab -->
+        <div class="tab-pane fade" id="coca-cola" role="tabpanel" aria-labelledby="coca-cola-tab">
+            <div class="card shadow-sm">
+                <div class="card-header bg-success text-white">
+                    <h4>Coca Cola Scheduled Tasks</h4>
+                </div>
+                <div class="card-body">
+                    <button class="btn btn-primary mb-3" onclick="triggerTask('coca-cola')">Manual Trigger</button>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label for="coca-cola-date-filter">Select Date:</label>
+                            <input type="date" id="coca-cola-date-filter" class="form-control" onchange="filterRecords('coca-cola')">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="coca-cola-error-filter">Show Only Errors:</label>
+                            <input type="checkbox" id="coca-cola-error-filter" onchange="filterRecords('coca-cola')">
+                        </div>
+                    </div>
+                    <div class="table-responsive mt-3">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Store Name</th>
+                                    <th>Invoice Type</th>
+                                    <th>Invoice Number</th>
+                                    <th>Errors</th>
+                                    <th>Run Time</th>
+                                    <th>Triggered By</th>
+                                </tr>
+                            </thead>
+                            <tbody id="coca-cola-records">
+                                <!-- Coca Cola-specific data dynamically populated here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Eden Farm Tab -->
+        <div class="tab-pane fade" id="eden-farm" role="tabpanel" aria-labelledby="eden-farm-tab">
+            <div class="card shadow-sm">
+                <div class="card-header bg-info text-white">
+                    <h4>Eden Farm Scheduled Tasks</h4>
+                </div>
+                <div class="card-body">
+                    <button class="btn btn-primary mb-3" onclick="triggerTask('eden-farm')">Manual Trigger</button>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label for="eden-farm-date-filter">Select Date:</label>
+                            <input type="date" id="eden-farm-date-filter" class="form-control" onchange="filterRecords('eden-farm')">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="eden-farm-error-filter">Show Only Errors:</label>
+                            <input type="checkbox" id="eden-farm-error-filter" onchange="filterRecords('eden-farm')">
+                        </div>
+                    </div>
+                    <div class="table-responsive mt-3">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Store Name</th>
+                                    <th>Invoice Type</th>
+                                    <th>Invoice Number</th>
+                                    <th>Errors</th>
+                                    <th>Run Time</th>
+                                    <th>Triggered By</th>
+                                </tr>
+                            </thead>
+                            <tbody id="eden-farm-records">
+                                <!-- Eden Farm-specific data dynamically populated here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Text Man Tab -->
+        <div class="tab-pane fade" id="text-man" role="tabpanel" aria-labelledby="text-man-tab">
+            <div class="card shadow-sm">
+                <div class="card-header bg-warning text-white">
+                    <h4>Text Man Scheduled Tasks</h4>
+                </div>
+                <div class="card-body">
+                    <button class="btn btn-primary mb-3" onclick="triggerTask('text-man')">Manual Trigger</button>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label for="text-man-date-filter">Select Date:</label>
+                            <input type="date" id="text-man-date-filter" class="form-control" onchange="filterRecords('text-man')">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="text-man-error-filter">Show Only Errors:</label>
+                            <input type="checkbox" id="text-man-error-filter" onchange="filterRecords('text-man')">
+                        </div>
+                    </div>
+                    <div class="table-responsive mt-3">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Store Name</th>
+                                    <th>Invoice Type</th>
+                                    <th>Invoice Number</th>
+                                    <th>Errors</th>
+                                    <th>Run Time</th>
+                                    <th>Triggered By</th>
+                                </tr>
+                            </thead>
+                            <tbody id="text-man-records">
+                                <!-- Text Man-specific data dynamically populated here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+
+    document.addEventListener('DOMContentLoaded', function () {
+        // Fetch counts from the backend
+        fetch('/scheduled_tasks/workflows_counts') // Correct the endpoint to match your blueprint
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Update the counts dynamically
+                document.getElementById('coca-cola-invoices-count').textContent = data.coca_cola || 0;
+                document.getElementById('eden-farm-invoices-count').textContent = data.eden_farm || 0;
+                document.getElementById('text-man-invoices-count').textContent = data.text_man || 0;
+            })
+            .catch(error => {
+                console.error('Error fetching scheduled workflow counts:', error);
+            });
+    });
+
+    document.addEventListener('DOMContentLoaded', function () {
+        // Fetch last run details from the backend
+        fetch('/scheduled_tasks/last_run_details')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Update the last run details dynamically
+                document.getElementById('coca-cola-last-run').textContent = data['coca-cola'].last_run_time || "N/A";
+                document.getElementById('coca-cola-errors').textContent = data['coca-cola'].errors || "N/A";
+                document.getElementById('coca-cola-next-run').textContent = data['coca-cola'].next_scheduled_run || "N/A";
+
+                document.getElementById('eden-farm-last-run').textContent = data['eden_farm'].last_run_time || "N/A";
+                document.getElementById('eden-farm-errors').textContent = data['eden_farm'].errors || "N/A";
+                document.getElementById('eden-farm-next-run').textContent = data['eden_farm'].next_scheduled_run || "N/A";
+
+                document.getElementById('text-man-last-run').textContent = data['text_management'].last_run_time || "N/A";
+                document.getElementById('text-man-errors').textContent = data['text_management'].errors || "N/A";
+                document.getElementById('text-man-next-run').textContent = data['text_management'].next_scheduled_run || "N/A";
+            })
+            .catch(error => {
+                console.error('Error fetching last run details:', error);
+            });
+    });
+
+
+
+    function triggerTask(taskType) {
+        const endpointMap = {
+            "coca-cola": "/scheduled_tasks/trigger_coca-cola",
+            "eden-farm": "/scheduled_tasks/trigger_eden-farm",
+            "text-man": "/scheduled_tasks/trigger_text-man",
+        };
+        const endpoint = endpointMap[taskType];
+
+        if (!endpoint) {
+            alert("Invalid task type");
+            return;
+        }
+
+        fetch(endpoint, { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message || 'Task triggered successfully!');
+            })
+            .catch(error => {
+                console.error('Error triggering task:', error);
+                alert('Failed to trigger task.');
+            });
+    }
+
+    function filterRecords(taskType) {
+        const dateFilter = document.getElementById(`${taskType}-date-filter`).value;
+        const errorFilter = document.getElementById(`${taskType}-error-filter`).checked;
+
+        fetch(`/scheduled_tasks/filter_records/${taskType}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: dateFilter, errorsOnly: errorFilter })
+        })
+            .then(response => response.json())
+            .then(data => {
+                const tableBody = document.getElementById(`${taskType}-records`);
+                tableBody.innerHTML = '';
+
+                data.records.forEach(record => {
+                    const row = `<tr>
+                        <td>${record.store_name}</td>
+                        <td>${record.invoice_type}</td>
+                        <td>${record.invoice_number}</td>
+                        <td>${record.errors || 'None'}</td>
+                        <td>${record.run_time}</td>
+                        <td>${record.triggered_by}</td>
+                    </tr>`;
+                    tableBody.innerHTML += row;
+                });
+
+                if (data.records.length === 0) {
+                    tableBody.innerHTML = '<tr><td colspan="6" class="text-center">No records found</td></tr>';
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching records:', error);
+                alert('Failed to load records.');
+            });
+    }
+</script>
+{% endblock %}

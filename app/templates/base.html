@@ -263,19 +263,27 @@
         <a href="{{ url_for('main.home') }}">
             <i class="fas fa-home"></i> Home
         </a>
-        <a href="{{ url_for('main.settings') }}">
-            <i class="fas fa-cog"></i> Settings
-        </a>
+        
         <a href="{{ url_for('recharging.recharging_home') }}">
             <i class="fas fa-play"></i> Recharging
         </a>
+        
+        <a href="{{ url_for('main.auto_workflows') }}">
+            <i class="fas fa-sync-alt"></i> Auto Workflows
+        </a>
+
+        <a href="{{ url_for('main.scheduled_tasks') }}">
+            <i class="fas fa-sync-alt"></i> Scheduled Tasks
+        </a>
+
+        <a href="{{ url_for('main.settings') }}">
+            <i class="fas fa-cog"></i> Settings
+        </a>
+
         <!-- Use Xero Logo from URL -->
         <a href="{{ url_for('main.xero_settings') }}">
             <img src="https://upload.wikimedia.org/wikipedia/en/thumb/9/9f/Xero_software_logo.svg/2048px-Xero_software_logo.svg.png" alt="Xero Logo" style="width: 20px; height: 20px; margin-right: 10px;">
             Xero Settings
-        </a>
-        <a href="{{ url_for('main.auto_workflows') }}">
-            <i class="fas fa-sync-alt"></i> Auto Workflows
         </a>
 
         <!-- Logs Toggle Switch above logout -->

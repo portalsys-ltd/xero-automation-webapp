@@ -12,6 +12,8 @@ import re
 import json
 from app.routes.auth import user_login_required
 from app import db 
+from celery.result import AsyncResult
+
 
 auto_workflows_bp = Blueprint('auto_workflows', __name__, url_prefix='/auto_workflows')
 
@@ -179,6 +181,26 @@ def process_dom_purchase_invoices_route():
         return jsonify({"error": "Week parameter is missing"}), 400
 
     task = process_dom_purchase_invoices_task.apply_async(args=[user_id, int(week)])
+    
+    task_type = "process_dom_purchase"
+
+    # Save task details to the database
+    try:
+        new_task = TaskStatus(
+            task_id=task.id,
+            user_id=user_id,
+            task_type=task_type,
+            status='in_progress'
+        )
+        db.session.add(new_task)
+        db.session.commit()
+
+        print(f"TaskStatus entry created for task_id: {task.id}")
+    except Exception as e:
+        print(f"Error saving TaskStatus to database: {e}")
+        return jsonify({"status": "error", "message": "Failed to save task to database."}), 500
+
+
     if task:
         return jsonify({'task_id': task.id, 'message': 'Task started!'})
     else:
@@ -190,6 +212,26 @@ def process_dom_purchase_invoices_route():
 def process_dom_sales_invoices_route():
     user_id = current_user.id  # Pass the user's ID instead of the whole object
     task = process_dom_sales_invoices_task.apply_async(args=[user_id])
+
+    task_type = "process_dom_sales"
+
+    # Save task details to the database
+    try:
+        new_task = TaskStatus(
+            task_id=task.id,
+            user_id=user_id,
+            task_type=task_type,
+            status='in_progress'
+        )
+        db.session.add(new_task)
+        db.session.commit()
+
+        print(f"TaskStatus entry created for task_id: {task.id}")
+    except Exception as e:
+        print(f"Error saving TaskStatus to database: {e}")
+        return jsonify({"status": "error", "message": "Failed to save task to database."}), 500
+
+
     if task:
         return jsonify({'task_id': task.id, 'message': 'Task started!'})
     else:
@@ -230,7 +272,7 @@ def active_task_status():
     tasks = (
         TaskStatus.query.filter(
             TaskStatus.user_id == user_id,
-            TaskStatus.task_type.in_(['pre_process_dom_purchase_invoices', 'process_dom_purchase']),  # Filter by task types
+            TaskStatus.task_type.in_(['pre_process_dom_purchase_invoices', 'process_dom_purchase', 'sales', 'process_dom_sales']),  # Filter by task types
             TaskStatus.status.in_(['in_progress', 'failed', 'completed'])  # Include relevant statuses
         )
         .order_by(TaskStatus.created_at.desc())  # Order by most recent
@@ -278,11 +320,17 @@ def active_task_status():
 @auto_workflows_bp.route('/task_status/<task_id>', methods=['GET'])
 def task_status(task_id):
 
-    task = pre_process_dom_purchase_invoices_task.AsyncResult(task_id)
+    task = AsyncResult(task_id) 
 
-    if task.state == 'PENDING':
-        # If pending, try the process task instead
-        task = process_dom_purchase_invoices_task.AsyncResult(task_id)
+    print(task.id)
+
+     # Default response
+    response = {
+        'state': task.state,
+        'progress': 0,
+        'message': 'Task pending or unknown.',
+        'errors': []
+    }
  
     if task.state == 'PENDING':
         response = {
@@ -298,7 +346,7 @@ def task_status(task_id):
         }
     elif task.state == 'SUCCESS':
         # Handle the case where task.result or task.info is None
-        result = task.result or {}
+        result = task.result if isinstance(task.result, dict) else {}
         response = {
             'state': task.state,
             'progress': 100,  # Task is complete, so progress is 100%
