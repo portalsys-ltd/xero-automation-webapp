@@ -1774,6 +1774,7 @@ def process_cocacola_task(self, user_id):
         
         # Check if there are any errors
         invoice_errors = data.get("errors", [])
+        
         if invoice_errors:
             errors.extend(invoice_errors)
 

@@ -40,6 +40,7 @@ scheduled_tasks_bp = Blueprint('scheduled_tasks', __name__, url_prefix='/schedul
 @user_login_required
 def get_scheduled_workflow_counts_route():
     response = get_supplier_invoices_workflow_counts(current_user)  # Call the function
+    print(response)
     return response
 
 @scheduled_tasks_bp.route('/trigger_coca-cola', methods=['POST'])

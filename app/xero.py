@@ -858,13 +858,13 @@ def get_supplier_invoices_workflow_counts(user):
                 # Fetch supplier invoices
                 invoices = accounting_api.get_invoices(
                     xero_tenant_id,
-                    where='(Contact.Name.Contains("Coca-Cola") OR Contact.Name.Contains("Eden Farm") OR Contact.Name.Contains("Text Management")) AND AmountPaid == 0 AND AmountDue > 0 AND Status == "AUTHORISED"'
+                    where='(Contact.Name.Contains("Coca-Cola") OR Contact.Name.Contains("Eden Farm") OR Contact.Name.Contains("Text Management")) AND AmountPaid=0 AND AmountDue > 0 AND Status ="AUTHORISED" AND Date>DateTime(2024, 01, 01)'
                 )
 
                 # Fetch credit notes
                 credit_notes = accounting_api.get_credit_notes(
                     xero_tenant_id,
-                    where='(Contact.Name.Contains("Coca-Cola") OR Contact.Name.Contains("Eden Farm") OR Contact.Name.Contains("Text Management")) AND Total > 0 AND Status == "AUTHORISED"'
+                    where='(Contact.Name.Contains("Coca-Cola") OR Contact.Name.Contains("Eden Farm") OR Contact.Name.Contains("Text Management")) AND Total > 0 AND Status="AUTHORISED" AND Date>DateTime(2024, 01, 01)'
                 )
 
                 # Count supplier invoices
