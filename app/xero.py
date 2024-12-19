@@ -22,6 +22,7 @@ import time
 import dateutil.parser
 import os
 from dotenv import load_dotenv
+from sqlalchemy import or_
 
 
 from xero_python.accounting import AccountingApi, Account, Accounts, AccountType, Allocation, Allocations, BatchPayment, BatchPayments, BankTransaction, BankTransactions, BankTransfer, BankTransfers, Contact, Contacts, ContactGroup, ContactGroups, ContactPerson, CreditNote, CreditNotes, Currency, Currencies, CurrencyCode, Employee, Employees, ExpenseClaim, ExpenseClaims, HistoryRecord, HistoryRecords, Invoice, Invoices, Item, Items, LineAmountTypes, LineItem, Payment, Payments, PaymentService, PaymentServices, Phone, Purchase, Quote, Quotes, Receipt, Receipts, RepeatingInvoice, RepeatingInvoices, Schedule, TaxComponent, TaxRate, TaxRates, TaxType, TrackingCategory, TrackingCategories, TrackingOption, TrackingOptions, User, Users, LineItemTracking
@@ -903,9 +904,6 @@ def get_supplier_invoices_workflow_counts(user):
 
                     if not existing_record:
                         if "coca-cola" in contact_name:
-                            print(connection.tenant_name)
-                            print(credit_note_id)
-                            print(credit_note_date)
                             supplier_invoices_count["coca_cola"] += 1
                         elif "eden farm" in contact_name:
                             supplier_invoices_count["eden_farm"] += 1
@@ -2015,9 +2013,22 @@ def extract_coca_cola_invoice_data(user, invoice):
         if store_postcode in ["Postcode not found", "Ship-to & Sold-to address not found"]:
             errors.append("Postcode not found in invoice")
             return {"errors": errors}
+        
+        # Normalize the store_postcode to match database format
+        store_postcode = store_postcode.replace(" ", "").upper()
 
-        # Fetch tracking category ID and tracking option ID based on the store postcode
-        tracking_category = TrackingCategoryModel.query.filter_by(store_postcode=store_postcode, user_id=user.id).first()
+    
+        tracking_category = TrackingCategoryModel.query.filter(
+            TrackingCategoryModel.user_id == user.id,
+            or_(
+                TrackingCategoryModel.store_postcode.ilike(f"%{store_postcode},%"),
+                TrackingCategoryModel.store_postcode.ilike(f"%,{store_postcode},%"),
+                TrackingCategoryModel.store_postcode.ilike(f"%,{store_postcode}%"),
+                TrackingCategoryModel.store_postcode == store_postcode
+            )
+        ).first()
+
+
         if not tracking_category:
             errors.append(f"No tracking category found for {store_postcode}")
             return {"errors": errors}

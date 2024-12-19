@@ -660,7 +660,6 @@ def get_tracking_categories():
 
 
 @main_bp.route('/save_tracking_categories', methods=['POST'])
-
 def save_tracking_categories():
     if not request.is_json:
         return jsonify({'status': 'error', 'message': 'Invalid content type, expected application/json'}), 415
@@ -681,6 +680,11 @@ def save_tracking_categories():
             store_number = category['store_number']
             store_postcode = category['store_postcode']
             store_contact = category['store_contact']
+
+            # Normalize the store_postcode by removing all spaces
+            if store_postcode:
+                store_postcode = store_postcode.replace(" ", "").upper()
+
 
             # Find the existing tracking category using tracking_option_id
             existing_category = TrackingCategoryModel.query.filter_by(
