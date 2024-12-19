@@ -1844,10 +1844,14 @@ def get_invoices_and_credit_notes(user, tenants, contact_name):
                 tenant_name = connection.tenant_name
 
                 try:
-                    # Fetch all invoices for the tenant with the specified contact name
                     invoices = accounting_api.get_invoices(
                         xero_tenant_id,
-                        where=f'Contact.Name.Contains("{contact_name}") AND AmountDue > 0 AND Status == "AUTHORISED"'
+                        where=(
+                            f'Contact.Name.Contains("{contact_name}") AND '
+                            f'AmountDue > 0 AND '
+                            f'Status == "AUTHORISED" AND '
+                            f'InvoiceNumber != ""'
+                        )
                     )
 
                     add_log(f"Found {len(invoices.invoices)} {contact_name} invoices for tenant {tenant_name}.", log_type="general", user_id=user.id)
@@ -1897,8 +1901,13 @@ def get_invoices_and_credit_notes(user, tenants, contact_name):
                     # Fetch all credit notes for the tenant with the specified contact name
                     credit_notes = accounting_api.get_credit_notes(
                         xero_tenant_id,
-                        where=f'Contact.Name.Contains("{contact_name}") AND Total > 0 AND Status == "AUTHORISED"'
-                    )
+                        where=(
+                            f'Contact.Name.Contains("{contact_name}") AND '
+                            f'Total > 0 AND '
+                            f'Status == "AUTHORISED" AND '
+                            f'InvoiceNumber != ""'
+                        )
+)
 
                     add_log(f"Found {len(credit_notes.credit_notes)} {contact_name} credit notes for tenant {tenant_name}.", log_type="general", user_id=user.id)
 
