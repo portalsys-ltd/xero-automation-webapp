@@ -2172,8 +2172,20 @@ def extract_eden_farm_invoice_data(user, invoice):
             errors.append("Postcode not found in invoice")
             return {"errors": errors}
 
-        # Fetch tracking category ID and tracking option ID based on the store postcode
-        tracking_category = TrackingCategoryModel.query.filter_by(store_postcode=store_postcode, user_id=user.id).first()
+        # Normalize the store_postcode to match database format
+        store_postcode = store_postcode.replace(" ", "").upper()
+
+    
+        tracking_category = TrackingCategoryModel.query.filter(
+            TrackingCategoryModel.user_id == user.id,
+            or_(
+                TrackingCategoryModel.store_postcode.ilike(f"%{store_postcode},%"),
+                TrackingCategoryModel.store_postcode.ilike(f"%,{store_postcode},%"),
+                TrackingCategoryModel.store_postcode.ilike(f"%,{store_postcode}%"),
+                TrackingCategoryModel.store_postcode == store_postcode
+            )
+        ).first()
+        
         if not tracking_category:
             errors.append(f"No tracking category found for {store_postcode}")
             return {"errors": errors}
