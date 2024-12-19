@@ -70,6 +70,12 @@ def eden_farm_process_invoices_route():
 def get_last_run_details():
     from datetime import timedelta, datetime
 
+    # Fetch the user_id from the session
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({"error": "User not logged in"}), 401
+
+
     # Fetch last run details for each invoice type
     invoice_types = ["Coca-Cola", "Eden Farm", "Text Management"]
     last_run_details = {}
@@ -78,7 +84,7 @@ def get_last_run_details():
         # Query the latest record for the given invoice type
         last_record = (
             SupplierInvoiceRecord.query
-            .filter_by(invoice_type=invoice_type)
+            .filter_by(invoice_type=invoice_type, user_id=user_id)
             .order_by(SupplierInvoiceRecord.run_time.desc())
             .first()
         )
@@ -121,6 +127,12 @@ def get_last_run_details():
 @scheduled_tasks_bp.route('/filter_records/<string:task_type>', methods=['POST'])
 @user_login_required
 def filter_records(task_type):
+
+    # Fetch the user_id from the session
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({"error": "User not logged in"}), 401
+
     
     # Parse JSON data from the request
     data = request.get_json()
@@ -139,7 +151,7 @@ def filter_records(task_type):
         return jsonify({"error": "Invalid task type"}), 400
 
     # Query the records
-    query = SupplierInvoiceRecord.query.filter_by(invoice_type=invoice_type)
+    query = SupplierInvoiceRecord.query.filter_by(invoice_type=invoice_type, user_id=user_id)
 
     if filter_date:
         # Filter by date
