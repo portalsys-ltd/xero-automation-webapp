@@ -16,6 +16,7 @@ import pdfplumber
 import csv
 from celery import shared_task
 from io import StringIO, BytesIO
+from sqlalchemy import func, and_
 
 
 
@@ -1774,7 +1775,7 @@ def process_cocacola_task(self, user_id):
         
         # Check if there are any errors
         invoice_errors = data.get("errors", [])
-        
+
         if invoice_errors:
             errors.extend(invoice_errors)
 
@@ -1824,7 +1825,6 @@ def process_cocacola_task(self, user_id):
     for credit_note in credit_notes_to_process:
         data = extract_coca_cola_invoice_data(user, credit_note)
 
-        
         # Check if there are any errors
         credit_note_errors = data.get("errors", [])
         if credit_note_errors:
@@ -1833,13 +1833,13 @@ def process_cocacola_task(self, user_id):
             # Store invoice with errors in SupplierInvoiceRecord
             new_record = SupplierInvoiceRecord(
                 user_id=user.id,
-                store_name=invoice["tenant_name"],
+                store_name=credit_note["tenant_name"],
                 invoice_type="Coca-Cola",
-                invoice_number=invoice["invoice_reference"],
-                invoice_id=invoice['invoice_id'],
-                errors=', '.join(invoice_errors),
+                invoice_number=credit_note["invoice_reference"],
+                invoice_id=credit_note['invoice_id'],
+                errors=', '.join(credit_note_errors),
                 triggered_by="manual",  # Or "manual" if triggered manually
-                date_of_invoice=invoice["invoice_date"]
+                date_of_invoice=credit_note["invoice_date"]
             )
             db.session.add(new_record)
             db.session.commit()
@@ -1859,12 +1859,12 @@ def process_cocacola_task(self, user_id):
         
         new_record = SupplierInvoiceRecord(
             user_id=user.id,
-            store_name=invoice["tenant_name"],
+            store_name=credit_note["tenant_name"],
             invoice_type="Coca-Cola",
-            invoice_number=invoice["invoice_reference"],
-            invoice_id=invoice['invoice_id'],
+            invoice_number=credit_note["invoice_reference"],
+            invoice_id=credit_note['invoice_id'],
             triggered_by="manual",  # Or "manual" if triggered manually
-            date_of_invoice=invoice["invoice_date"]
+            date_of_invoice=credit_note["invoice_date"]
         )
         db.session.add(new_record)
         db.session.commit()
@@ -1881,7 +1881,36 @@ def process_cocacola_task(self, user_id):
         'message': "Coca-Cola invoice processing completed",
         'errors': errors  # Ensure errors are included in the meta response
     })
+
+    # Step 1: Create a subquery to find the most recent record for each invoice_id
+    latest_records_subquery = db.session.query(
+        SupplierInvoiceRecord.invoice_id,
+        func.max(SupplierInvoiceRecord.run_time).label("latest_run_time")
+    ).filter(SupplierInvoiceRecord.invoice_id != None).group_by(SupplierInvoiceRecord.invoice_id).subquery()
+
+    # Step 2: Create a subquery to find the IDs of older records
+    subquery = db.session.query(
+        SupplierInvoiceRecord.id
+    ).join(
+        latest_records_subquery,
+        and_(
+            SupplierInvoiceRecord.invoice_id == latest_records_subquery.c.invoice_id,
+            SupplierInvoiceRecord.run_time < latest_records_subquery.c.latest_run_time
+        )
+    ).subquery()
+
+    # Step 3: Use subquery.select() explicitly in the `.in_()` filter
+    db.session.query(SupplierInvoiceRecord).filter(
+        SupplierInvoiceRecord.id.in_(subquery.select())
+    ).delete(synchronize_session=False)
+
+    # Commit the changes
+    db.session.commit()
     
+
+    # Log the cleanup
+    add_log("Removed duplicate entries from SupplierInvoiceRecord table, keeping only the most recent ones.", log_type="general", user_id=user.id)
+        
     # Prepare final message
     if errors:
         return {
@@ -1974,7 +2003,22 @@ def process_textman_task(self, user_id):
         # Check if there are any errors
         credit_note_errors = data.get("errors", [])
         if credit_note_errors:
+
             errors.extend(credit_note_errors)
+
+            new_record = SupplierInvoiceRecord(
+                user_id=user.id,
+                store_name=credit_note["tenant_name"],
+                invoice_type="Text Management",
+                invoice_number=credit_note["invoice_reference"],
+                invoice_id=credit_note['invoice_id'],
+                errors=', '.join(credit_note_errors),
+                triggered_by="manual",
+                date_of_invoice=credit_note["invoice_date"]
+            )
+            db.session.add(new_record)
+            db.session.commit()
+
             add_log(f"Error processing Textman credit note {credit_note['invoice_id']}: {', '.join(credit_note_errors)}", log_type="error", user_id=user.id)
             continue  # Skip this credit note due to errors
 
@@ -1990,12 +2034,12 @@ def process_textman_task(self, user_id):
 
         new_record = SupplierInvoiceRecord(
             user_id=user.id,
-            store_name=invoice["tenant_name"],
+            store_name=credit_note["tenant_name"],
             invoice_type="Text Management",
-            invoice_number=invoice["invoice_reference"],
-            invoice_id=invoice['invoice_id'],
+            invoice_number=credit_note["invoice_reference"],
+            invoice_id=credit_note['invoice_id'],
             triggered_by="manual",
-            date_of_invoice=invoice["invoice_date"]
+            date_of_invoice=credit_note["invoice_date"]
         )
         db.session.add(new_record)
         db.session.commit()
@@ -2011,6 +2055,31 @@ def process_textman_task(self, user_id):
         'message': "Textman invoice processing completed",
         'errors': errors  # Ensure errors are included in the meta response
     })
+
+    # Step 1: Create a subquery to find the most recent record for each invoice_id
+    latest_records_subquery = db.session.query(
+        SupplierInvoiceRecord.invoice_id,
+        func.max(SupplierInvoiceRecord.run_time).label("latest_run_time")
+    ).filter(SupplierInvoiceRecord.invoice_id != None).group_by(SupplierInvoiceRecord.invoice_id).subquery()
+
+    # Step 2: Create a subquery to find the IDs of older records
+    subquery = db.session.query(
+        SupplierInvoiceRecord.id
+    ).join(
+        latest_records_subquery,
+        and_(
+            SupplierInvoiceRecord.invoice_id == latest_records_subquery.c.invoice_id,
+            SupplierInvoiceRecord.run_time < latest_records_subquery.c.latest_run_time
+        )
+    ).subquery()
+
+    # Step 3: Use subquery.select() explicitly in the `.in_()` filter
+    db.session.query(SupplierInvoiceRecord).filter(
+        SupplierInvoiceRecord.id.in_(subquery.select())
+    ).delete(synchronize_session=False)
+
+    # Commit the changes
+    db.session.commit()
     
     # Prepare final message
     if errors:
@@ -2135,7 +2204,7 @@ def process_eden_farm_task(self, user_id):
 
         new_record = SupplierInvoiceRecord(
             user_id=user.id,
-            store_name=invoice["tenant_name"],
+            store_name=credit_note["tenant_name"],
             invoice_type="Eden Farm",
             invoice_number=credit_note["invoice_reference"],
             invoice_id=credit_note['invoice_id'],
@@ -2156,6 +2225,31 @@ def process_eden_farm_task(self, user_id):
         'message': "Eden Farm invoice processing completed",
         'errors': errors  # Ensure errors are included in the meta response
     })
+
+    # Step 1: Create a subquery to find the most recent record for each invoice_id
+    latest_records_subquery = db.session.query(
+        SupplierInvoiceRecord.invoice_id,
+        func.max(SupplierInvoiceRecord.run_time).label("latest_run_time")
+    ).filter(SupplierInvoiceRecord.invoice_id != None).group_by(SupplierInvoiceRecord.invoice_id).subquery()
+
+    # Step 2: Create a subquery to find the IDs of older records
+    subquery = db.session.query(
+        SupplierInvoiceRecord.id
+    ).join(
+        latest_records_subquery,
+        and_(
+            SupplierInvoiceRecord.invoice_id == latest_records_subquery.c.invoice_id,
+            SupplierInvoiceRecord.run_time < latest_records_subquery.c.latest_run_time
+        )
+    ).subquery()
+
+    # Step 3: Use subquery.select() explicitly in the `.in_()` filter
+    db.session.query(SupplierInvoiceRecord).filter(
+        SupplierInvoiceRecord.id.in_(subquery.select())
+    ).delete(synchronize_session=False)
+
+    # Commit the changes
+    db.session.commit()
     
     # Prepare the final response message
     if errors:

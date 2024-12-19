@@ -883,6 +883,8 @@ def get_supplier_invoices_workflow_counts(user):
                     if not existing_record:
                         if "coca-cola" in contact_name:
                             supplier_invoices_count["coca_cola"] += 1
+                            print(invoice.invoice_id)
+                            print(invoice.invoice_number)
                         elif "eden farm" in contact_name:
                             supplier_invoices_count["eden_farm"] += 1
                         elif "text management" in contact_name:
@@ -1907,7 +1909,7 @@ def get_invoices_and_credit_notes(user, tenants, contact_name):
                             f'Status == "AUTHORISED" AND '
                             f'CreditNoteNumber != ""'
                         )
-)
+                    )
 
                     add_log(f"Found {len(credit_notes.credit_notes)} {contact_name} credit notes for tenant {tenant_name}.", log_type="general", user_id=user.id)
 
