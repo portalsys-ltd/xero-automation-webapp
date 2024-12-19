@@ -1855,7 +1855,6 @@ def get_invoices_and_credit_notes(user, tenants, contact_name):
                             f'Status == "AUTHORISED" AND '
                             f'InvoiceNumber != "" AND '
                             f'Date >= DateTime(2024, 01, 01)'
-                        
                         )
                     )
 
@@ -1910,7 +1909,6 @@ def get_invoices_and_credit_notes(user, tenants, contact_name):
                             f'Contact.Name.Contains("{contact_name}") AND '
                             f'Total > 0 AND '
                             f'Status == "AUTHORISED" AND '
-                            f'CreditNoteNumber != "" AND'
                             f'Date >= DateTime(2024, 01, 01)'
                         )
                     )

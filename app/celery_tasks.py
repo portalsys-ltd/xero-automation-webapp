@@ -1754,6 +1754,9 @@ def process_cocacola_task(self, user_id):
     # Fetch Coca-Cola invoices without tracking categories for these tenants
     cocacola_invoices= get_invoices_and_credit_notes(user, tenant_names, "Coca-Cola")
 
+
+
+
     # Calculate total invoices to process
     total_invoices = len(cocacola_invoices)
     processed_invoices = 0
@@ -1823,6 +1826,7 @@ def process_cocacola_task(self, user_id):
     
     # Process the credit notes for each tenant
     for credit_note in credit_notes_to_process:
+
         data = extract_coca_cola_invoice_data(user, credit_note)
 
         # Check if there are any errors
@@ -1857,6 +1861,7 @@ def process_cocacola_task(self, user_id):
             error = assign_tracking_code_to_credit_note(data, user)
             add_log(f"Credit note {credit_note['invoice_id']} is a valid credit memo.", log_type="general", user_id=user.id)
         
+        
         new_record = SupplierInvoiceRecord(
             user_id=user.id,
             store_name=credit_note["tenant_name"],
@@ -1866,6 +1871,8 @@ def process_cocacola_task(self, user_id):
             triggered_by="manual",  # Or "manual" if triggered manually
             date_of_invoice=credit_note["invoice_date"]
         )
+
+
         db.session.add(new_record)
         db.session.commit()
 
