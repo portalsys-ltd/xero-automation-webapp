@@ -71,8 +71,6 @@ def settings():
     connected_tenants = [tenant.tenant_name for tenant in XeroTenant.query.filter_by(user_id=user_id).filter(XeroTenant.tenant_name != user_company_name).all()]
 
 
-    print(connected_tenants)
-
     tracking_codes = TrackingCode.query.filter_by(user_id=session['user_id']).all()
     group_tracking_codes = GroupTrackingCode.query.filter_by(user_id=session['user_id']).all()
     dom_tenants = DomPurchaseInvoicesTenant.query.filter_by(user_id=session['user_id']).all()
