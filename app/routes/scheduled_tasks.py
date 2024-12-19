@@ -29,9 +29,6 @@ import json
 from sqlalchemy.sql import func
 
 
-
-
-
 # Define the blueprint
 scheduled_tasks_bp = Blueprint('scheduled_tasks', __name__, url_prefix='/scheduled_tasks')
 

@@ -883,6 +883,7 @@ def get_supplier_invoices_workflow_counts(user):
                     if not existing_record:
                         if "coca-cola" in contact_name:
                             supplier_invoices_count["coca_cola"] += 1
+                            print(connection.tenant_name)
                             print(invoice.invoice_id)
                             print(invoice.invoice_number)
                         elif "eden farm" in contact_name:
