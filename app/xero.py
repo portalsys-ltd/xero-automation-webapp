@@ -1865,11 +1865,11 @@ def get_invoices_and_credit_notes(user, tenants, contact_name):
                     for invoice in invoices.invoices:
                         invoice_id = invoice.invoice_id
 
-                        # Check if the invoice already exists in the database
+                        # Check if the invoice already exists in the database with no errors
                         existing_invoice = SupplierInvoiceRecord.query.filter_by(
                             invoice_id=invoice_id,
+                            errors=None,
                             date_of_invoice=invoice.date,
-                            invoice_number=invoice.invoice_number
                         ).first()
 
                         if existing_invoice and not existing_invoice.errors:
@@ -1921,11 +1921,11 @@ def get_invoices_and_credit_notes(user, tenants, contact_name):
                     for credit_note in credit_notes.credit_notes:
                         credit_note_id = credit_note.credit_note_id
 
-                        # Check if the credit note already exists in the database
+                        # Check if the credit note already exists in the database with no errors
                         existing_credit_note = SupplierInvoiceRecord.query.filter_by(
                             invoice_id=credit_note_id,
+                            errors=None,
                             date_of_invoice=credit_note.date,
-                            invoice_number=credit_note.credit_note_number
                         ).first()
 
                         if existing_credit_note and not existing_credit_note.errors:
