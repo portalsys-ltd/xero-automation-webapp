@@ -66,39 +66,7 @@ Auto Workflows
                             </div>
                         </div>
 
-                        <!-- Supplier Invoices Card -->
-                        <div class="col-md-4">
-                            <div class="card text-center mb-4">
-                                <div class="card-body">
-                                    <i id="coca-cola-icon" class="fas fa-warehouse fa-2x mb-3"></i>
-                                    <i id="eden-farm-icon" class="fas fa-warehouse fa-2x mb-3"></i>
-                                    <i id="text-man-icon" class="fas fa-warehouse fa-2x mb-3"></i>
-                                    <h5 class="card-title">Supplier Invoices</h5>
-                                    <p class="lead">Coca-Cola: <span id="coca-cola-invoices-count" class="file-count">0</span> files</p>
-                                    <p class="lead">Eden Farm: <span id="eden-farm-invoices-count" class="file-count">0</span> files</p>
-                                    <p class="lead">Text Man: <span id="text-man-invoices-count" class="file-count">0</span> files</p>
-                                    <button class="btn btn-primary" onclick="toggleList('supplier-invoices-list')">View Details</button>
-                                    <ul id="supplier-invoices-list" class="tenant-list mt-3">
-                                        <!-- Coca-Cola -->
-                                        <li>
-                                            <h6>Coca-Cola</h6>
-                                            <ul id="coca-cola-tenants-list"></ul>
-                                        </li>
-                                        <!-- Eden Farm -->
-                                        <li>
-                                            <h6>Eden Farm</h6>
-                                            <ul id="eden-farm-tenants-list"></ul>
-                                        </li>
-                                        <!-- Text Management -->
-                                        <li>
-                                            <h6>Text Man</h6>
-                                            <ul id="text-man-tenants-list"></ul>
-                                        </li>
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
-
+                    
 
                     </div>
                 </div>
@@ -603,16 +571,12 @@ Auto Workflows
                     // Set file counts and color indicators
                     setFileCountAndColor('purchase-invoices-count', 'purchase-invoices-icon', data.purchase_invoices_count);
                     setFileCountAndColor('sales-invoices-count', 'sales-invoices-icon', data.sales_invoices_count);
-                    setFileCountAndColor('coca-cola-invoices-count', 'coca-cola-icon', data.supplier_invoices_count.coca_cola);
-                    setFileCountAndColor('eden-farm-invoices-count', 'eden-farm-icon', data.supplier_invoices_count.eden_farm);
-                    setFileCountAndColor('text-man-invoices-count', 'text-man-icon', data.supplier_invoices_count.text_man);
+                    
 
                     // Populate tenant lists
                     populateTenantList('purchase-tenants-list', data.purchase_invoices_tenants);
                     populateTenantList('sales-tenants-list', data.sales_invoices_tenants);
-                    populateTenantList('coca-cola-tenants-list', data.coca_cola_tenants);
-                    populateTenantList('eden-farm-tenants-list', data.eden_farm_tenants);
-                    populateTenantList('text-man-tenants-list', data.text_man_tenants);
+         
                 })
                 .catch(error => console.error('Error fetching file overview data:', error));
         }

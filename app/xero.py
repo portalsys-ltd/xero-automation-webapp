@@ -711,23 +711,17 @@ def aggregate_auto_workflows_data(user):
     api_client, xero_app = get_xero_client_for_user(user)
     identity_api = IdentityApi(api_client)
     files_api = FilesApi(api_client)
-    accounting_api = AccountingApi(api_client)
 
     tenants = XeroTenant.query.filter_by(user_id=user.id).all()
 
     workflow_log = []
     total_files = 0
-    untracked_coca_cola_invoices = 0
     purchase_invoices_count = 0
     sales_invoices_count = 0
-    supplier_invoices_count = {"coca_cola": 0, "eden_farm": 0, "text_man": 0}
-    
+
     tenant_file_data = {
         "purchase_invoices_tenants": [],
-        "sales_invoices_tenants": [],
-        "coca_cola_tenants": [],
-        "eden_farm_tenants": [],
-        "text_man_tenants": []
+        "sales_invoices_tenants": []
     }
 
     # Get allowed tenants for the current user session
@@ -770,67 +764,23 @@ def aggregate_auto_workflows_data(user):
                 sales_invoices_count += sales_invoice_count
                 tenant_file_data["sales_invoices_tenants"].append({"name": connection.tenant_name, "file_count": sales_invoice_count})
 
-                # Process supplier invoices (Coca-Cola, Eden Farm, Text Man)
-                invoices = accounting_api.get_invoices(
-                    xero_tenant_id, 
-                    where='(Contact.Name.Contains("Coca-Cola") OR Contact.Name.Contains("Eden Farm") OR Contact.Name.Contains("Text Management")) AND AmountPaid == 0 AND AmountDue > 0 AND Status == "AUTHORISED"'
-                )
-
-                coca_cola_count = 0
-                eden_farm_count = 0
-                text_man_count = 0
-
-                for invoice in invoices.invoices:
-                    contact_name = invoice.contact.name.lower()
-
-                    def append_or_increment(tenant_list, tenant_name):
-                        for tenant in tenant_list:  # Iterate through the list
-                            if tenant["name"] == tenant_name:  # Check if tenant already exists
-                                tenant["file_count"] += 1  # Increment file_count
-                                return  # Exit the function once updated
-                        # If tenant is not found, append a new entry
-                        tenant_list.append({"name": tenant_name, "file_count": 1})
-
-                    # Updated logic
-                    if "cocacola" in contact_name:
-                        coca_cola_count += 1
-                        append_or_increment(tenant_file_data["coca_cola_tenants"], connection.tenant_name)
-                    elif "eden farm" in contact_name:
-                        eden_farm_count += 1
-                        append_or_increment(tenant_file_data["eden_farm_tenants"], connection.tenant_name)
-                    elif "text management" in contact_name:
-                        text_man_count += 1
-                        append_or_increment(tenant_file_data["text_man_tenants"], connection.tenant_name)
-
-                supplier_invoices_count["coca_cola"] += coca_cola_count
-                supplier_invoices_count["eden_farm"] += eden_farm_count
-                supplier_invoices_count["text_man"] += text_man_count
-
-
                 # Log per tenant for files
-                workflow_log.append(f"{connection.tenant_name}: {file_count} total files, {dom_purchase_invoice_count} Dom Purchase Invoices, {sales_invoice_count} Dom Sales Invoices, {coca_cola_count} Coca-Cola Invoices, {eden_farm_count} Eden Farm Invoices, {text_man_count} Text Man Invoices")
+                workflow_log.append(f"{connection.tenant_name}: {file_count} total files, {dom_purchase_invoice_count} Dom Purchase Invoices, {sales_invoice_count} Dom Sales Invoices")
 
-                
             except HTTPStatusException as e:
                 workflow_log.append(f"Error fetching files for tenant {connection.tenant_name}: {e}")
             except Exception as e:
                 workflow_log.append(f"Unexpected error fetching files for tenant {connection.tenant_name}: {e}")
-
-    workflow_log.append(f"Total Coca-Cola invoices with untracked line items: {untracked_coca_cola_invoices}")
-
 
     return jsonify({
         "total_files": total_files,
         "workflow_log": workflow_log,
         "purchase_invoices_count": purchase_invoices_count,
         "sales_invoices_count": sales_invoices_count,
-        "supplier_invoices_count": supplier_invoices_count,
         "purchase_invoices_tenants": tenant_file_data["purchase_invoices_tenants"],
-        "sales_invoices_tenants": tenant_file_data["sales_invoices_tenants"],
-        "coca_cola_tenants": tenant_file_data["coca_cola_tenants"],
-        "eden_farm_tenants": tenant_file_data["eden_farm_tenants"],
-        "text_man_tenants": tenant_file_data["text_man_tenants"]
+        "sales_invoices_tenants": tenant_file_data["sales_invoices_tenants"]
     })
+
 
 
 @xero_bp.route('/scheduled_workflows_counts')
@@ -2185,7 +2135,7 @@ def extract_eden_farm_invoice_data(user, invoice):
                 TrackingCategoryModel.store_postcode == store_postcode
             )
         ).first()
-        
+
         if not tracking_category:
             errors.append(f"No tracking category found for {store_postcode}")
             return {"errors": errors}
