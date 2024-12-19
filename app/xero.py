@@ -883,9 +883,6 @@ def get_supplier_invoices_workflow_counts(user):
                     if not existing_record:
                         if "coca-cola" in contact_name:
                             supplier_invoices_count["coca_cola"] += 1
-                            print(connection.tenant_name)
-                            print(invoice.invoice_id)
-                            print(invoice.invoice_number)
                         elif "eden farm" in contact_name:
                             supplier_invoices_count["eden_farm"] += 1
                         elif "text management" in contact_name:
@@ -906,6 +903,9 @@ def get_supplier_invoices_workflow_counts(user):
 
                     if not existing_record:
                         if "coca-cola" in contact_name:
+                            print(connection.tenant_name)
+                            print(credit_note_id)
+                            print(credit_note_date)
                             supplier_invoices_count["coca_cola"] += 1
                         elif "eden farm" in contact_name:
                             supplier_invoices_count["eden_farm"] += 1
