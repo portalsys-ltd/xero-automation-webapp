@@ -1905,7 +1905,7 @@ def get_invoices_and_credit_notes(user, tenants, contact_name):
                             f'Contact.Name.Contains("{contact_name}") AND '
                             f'Total > 0 AND '
                             f'Status == "AUTHORISED" AND '
-                            f'InvoiceNumber != ""'
+                            f'CreditNoteNumber != ""'
                         )
 )
 
@@ -1942,7 +1942,7 @@ def get_invoices_and_credit_notes(user, tenants, contact_name):
                                 'invoice_id': credit_note_id,
                                 'tenant_name': tenant_name,
                                 'invoice_date': invoice.date,
-                                'invoice_reference': invoice.credit_invoice_number,
+                                'invoice_reference': invoice.credit_note_number,
                                 'xero_type': "credit_note"
                             })
 
@@ -2345,7 +2345,7 @@ def convert_credit_memo_to_invoice(credit_memo_data, user):
             line_items=invoice_line_items,
             type="ACCPAY",  # Change this if it's a different type, such as "ACCREC"
             status="AUTHORISED",
-            invoice_number=original_credit_memo.credit_invoice_number
+            invoice_number=original_credit_memo.credit_note_number
         )
 
         # Create the invoice in Xero
