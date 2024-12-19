@@ -1942,7 +1942,7 @@ def get_invoices_and_credit_notes(user, tenants, contact_name):
                                 'invoice_id': credit_note_id,
                                 'tenant_name': tenant_name,
                                 'invoice_date': invoice.date,
-                                'invoice_reference': invoice.invoice_number,
+                                'invoice_reference': invoice.credit_invoice_number,
                                 'xero_type': "credit_note"
                             })
 
@@ -2238,7 +2238,8 @@ def convert_invoice_to_credit_memo(invoice, user):
             date=original_invoice.date,
             line_items=credit_memo_line_items,
             type="ACCPAYCREDIT",
-            status="AUTHORISED"
+            status="AUTHORISED",
+            credit_note_number=original_invoice.invoice_number
         )
 
         # Create the credit memo in Xero
@@ -2343,7 +2344,8 @@ def convert_credit_memo_to_invoice(credit_memo_data, user):
             due_date=original_credit_memo.date,
             line_items=invoice_line_items,
             type="ACCPAY",  # Change this if it's a different type, such as "ACCREC"
-            status="AUTHORISED"
+            status="AUTHORISED",
+            invoice_number=original_credit_memo.credit_invoice_number
         )
 
         # Create the invoice in Xero
@@ -2367,7 +2369,7 @@ def convert_credit_memo_to_invoice(credit_memo_data, user):
                 accounting_api.create_invoice_attachment_by_file_name(
                     tenant_id,
                     created_invoice.invoice_id,
-                    "Converted Invoice.pdf",
+                    "Converted to Invoice.pdf",
                     file_body,
                     include_online=True
                 )
