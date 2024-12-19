@@ -1941,8 +1941,8 @@ def get_invoices_and_credit_notes(user, tenants, contact_name):
                                 'tenant_id': xero_tenant_id,
                                 'invoice_id': credit_note_id,
                                 'tenant_name': tenant_name,
-                                'invoice_date': invoice.date,
-                                'invoice_reference': invoice.credit_note_number,
+                                'invoice_date': credit_note.date,
+                                'invoice_reference': credit_note.credit_note_number,
                                 'xero_type': "credit_note"
                             })
 
