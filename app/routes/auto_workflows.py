@@ -577,7 +577,7 @@ def create_inventory_template():
     # Step 2: Create an Excel file
     wb = Workbook()
     ws = wb.active
-    ws.title = "Inventory Template"
+    ws.title = "Stock Template"
 
     # Add headers
     ws['A1'] = "Last Day of Month"
@@ -612,14 +612,14 @@ def create_inventory_template():
 
     # Protect the worksheet
     ws.protection.enable()  # Enable worksheet protection
-    ws.protection.password = "inventory"  # Set a password for the protection
+    ws.protection.password = "stock"  # Set a password for the protection
 
     # Step 4: Save the file temporarily in the temp_files directory
     temp_dir = os.path.join(current_app.root_path, "static", "temp_files")
     if not os.path.exists(temp_dir):
         os.makedirs(temp_dir)
 
-    file_name = f"Inventory_Record.xlsx"
+    file_name = f"Stock_Record.xlsx"
     file_path = os.path.join(temp_dir, file_name)
 
     wb.save(file_path)

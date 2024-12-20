@@ -2644,7 +2644,7 @@ def upload_recharge_invoices_xero_task(self, user_id, purchase_csv_content, brea
 
 
 
-##########################Inventory######################################
+##########################Stock######################################
 
 @shared_task(bind=True)
 def process_inventory_task(self, user_id):
@@ -2670,14 +2670,14 @@ def process_inventory_task(self, user_id):
             tenant_id = tenant['tenant_id']
 
             # Create folders if they don't exist
-            processed_folder = create_folder_if_not_exists('Inventory - Processed', tenant_id, user)
-            rejected_folder = create_folder_if_not_exists('Inventory - Rejected', tenant_id, user)
+            processed_folder = create_folder_if_not_exists('Stock - Processed', tenant_id, user)
+            rejected_folder = create_folder_if_not_exists('Stock - Rejected', tenant_id, user)
 
             processed_folder_id = processed_folder.id
             rejected_folder_id = rejected_folder.id
 
             for file in tenant['files']:
-                if "Inventory_Record" in file['file_name']:
+                if "Stock_Record" in file['file_name']:
                     to_be_processed.append((file, tenant_id, processed_folder_id, rejected_folder_id))
 
         # Process each file
@@ -2708,7 +2708,7 @@ def create_inventory_journals(self, current_month_records, previous_month_record
     import pandas as pd
 
     user = User.query.get(user_id)
-    
+
     # Step 1: Create DataFrames from current and previous month records
     current_df = pd.DataFrame(current_month_records)
     previous_df = pd.DataFrame(previous_month_records)
