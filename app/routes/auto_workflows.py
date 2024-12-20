@@ -1,12 +1,12 @@
 # app/routes/auto_workflows.py
 
-from flask import Blueprint, jsonify, session, request
+from flask import Blueprint, jsonify, session, request, current_app
 from app.xero import xero_token_required, aggregate_auto_workflows_data, get_inbox_files_from_management_company
 from app.routes.logs import add_log
 from xero_python.exceptions import HTTPStatusException
 from flask_login import current_user
-from app.celery_tasks import pre_process_dom_purchase_invoices_task, process_dom_purchase_invoices_task, process_dom_sales_invoices_task, process_cocacola_task, process_eden_farm_task, process_textman_task, update_invoice_record_task
-from app.models import TrackingCategoryModel, User, DomPurchaseInvoicesTenant, InvoiceRecord, TaskStatus
+from app.celery_tasks import pre_process_dom_purchase_invoices_task, process_dom_purchase_invoices_task, process_dom_sales_invoices_task, process_cocacola_task, process_eden_farm_task, process_textman_task, update_invoice_record_task, process_inventory_task, create_inventory_journals
+from app.models import TrackingCategoryModel, User, DomPurchaseInvoicesTenant, InvoiceRecord, TaskStatus, InventoryRecord
 import pandas as pd
 import re
 import json
@@ -272,7 +272,7 @@ def active_task_status():
     tasks = (
         TaskStatus.query.filter(
             TaskStatus.user_id == user_id,
-            TaskStatus.task_type.in_(['pre_process_dom_purchase_invoices', 'process_dom_purchase', 'sales', 'process_dom_sales']),  # Filter by task types
+            TaskStatus.task_type.in_(['pre_process_dom_purchase_invoices', 'process_dom_purchase', 'sales', 'process_dom_sales','process_inventory']),  # Filter by task types
             TaskStatus.status.in_(['in_progress', 'failed', 'completed'])  # Include relevant statuses
         )
         .order_by(TaskStatus.created_at.desc())  # Order by most recent
@@ -430,6 +430,7 @@ def load_invoice_summary():
         # Prepare store data for matching
         store_records = []
         for store in store_details:
+
             # Check for a matching record in InvoiceRecord
             existing_record = InvoiceRecord.query.filter_by(
                 week_number=week_number,
@@ -521,3 +522,193 @@ def load_invoice_summary_sales():
     except Exception as e:
         print(f"Error loading invoice summary: {str(e)}")
         return jsonify({"error": "Failed to load summary"}), 500
+
+
+
+@auto_workflows_bp.route('/process_inventory_data', methods=['GET'])
+@user_login_required
+def process_inventory_data_route():
+    user_id = current_user.id  # Get the current user ID
+
+    # Trigger the inventory processing Celery task
+    task = process_inventory_task.apply_async(args=[user_id])
+
+    # Save task details in the database for tracking
+    try:
+        new_task = TaskStatus(
+            task_id=task.id,
+            user_id=user_id,
+            task_type="process_inventory",
+            status='in_progress'
+        )
+        db.session.add(new_task)
+        db.session.commit()
+        print(f"TaskStatus entry created for inventory task_id: {task.id}")
+    
+    except Exception as e:
+        print(f"Error saving TaskStatus to database: {e}")
+        return jsonify({"status": "error", "message": "Failed to save task to database."}), 500
+
+    return jsonify({"task_id": task.id, "message": "Inventory processing task started!"}), 202
+
+
+import os
+from flask import send_file, session
+from app.models import TrackingCategoryModel
+from openpyxl import Workbook
+from datetime import datetime
+from openpyxl.styles import Protection
+from openpyxl.utils import get_column_letter
+
+
+@auto_workflows_bp.route('/create_inventory_template', methods=['GET'])
+@user_login_required
+def create_inventory_template():
+    user_id = current_user.id
+
+    # Step 1: Query store names for the current user and filter later for digit-only store numbers
+    stores = TrackingCategoryModel.query.filter_by(user_id=user_id).filter(
+        TrackingCategoryModel.store_contact.isnot(None)
+    ).all()
+
+    # Filter for store numbers containing only digits
+    stores = [store for store in stores if store.store_number and store.store_number.isdigit()]
+
+    # Step 2: Create an Excel file
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Inventory Template"
+
+    # Add headers
+    ws['A1'] = "Last Day of Month"
+    ws['B1'] = ""
+    ws['A2'] = datetime.now().strftime("%d/%m/%Y")  # Default today's date for reference
+
+    ws['A4'] = "Store List"
+    ws['B4'] = "Amount"
+
+    # Add store data
+    row = 5
+    for store in stores:
+        ws.cell(row=row, column=1, value=store.tracking_category_option)  # Store Name
+        ws.cell(row=row, column=2, value="")  # Leave Amount blank
+        row += 1
+
+    # Set the width of the first column
+   
+    ws.column_dimensions[get_column_letter(1)].width = 25  # Adjust width as needed
+
+
+    # Step 3: Lock the "Store List" column and protect the worksheet
+    for row in ws.iter_rows(min_row=5, max_row=4 + len(stores), min_col=1, max_col=1):
+        for cell in row:
+            cell.protection = Protection(locked=True)  # Lock the cell
+
+    # Unlock the "Amount" column so it can be edited
+    ws['A2'].protection = Protection(locked=False)  # Unlock the date cell
+    for row in ws.iter_rows(min_row=5, max_row=4 + len(stores), min_col=2, max_col=2):
+        for cell in row:
+            cell.protection = Protection(locked=False)  # Unlock the cell
+
+    # Protect the worksheet
+    ws.protection.enable()  # Enable worksheet protection
+    ws.protection.password = "inventory"  # Set a password for the protection
+
+    # Step 4: Save the file temporarily in the temp_files directory
+    temp_dir = os.path.join(current_app.root_path, "static", "temp_files")
+    if not os.path.exists(temp_dir):
+        os.makedirs(temp_dir)
+
+    file_name = f"Inventory_Record.xlsx"
+    file_path = os.path.join(temp_dir, file_name)
+
+    wb.save(file_path)
+
+    # Step 5: Send file for download
+    return send_file(file_path, as_attachment=True, download_name=file_name)
+
+
+@auto_workflows_bp.route('/get_inventory_status', methods=['GET'])
+def get_inventory_status():
+    records = InventoryRecord.query.with_entities(
+        InventoryRecord.month,
+        InventoryRecord.year,
+        db.func.count(InventoryRecord.id).label('record_count'),
+        db.func.sum(InventoryRecord.processed.cast(db.Integer)).label('processed_count')
+    ).group_by(InventoryRecord.month, InventoryRecord.year).all()
+
+    result = [
+        {
+            "month": record.month,
+            "year": record.year,
+            "data_complete": record.record_count > 0,  # Example logic for completeness
+            "processed": record.processed_count == record.record_count
+        }
+        for record in records
+    ]
+    return jsonify(result)
+
+
+
+from datetime import datetime, timedelta
+from flask import jsonify, request
+
+
+
+@auto_workflows_bp.route('/process_inventory_month', methods=['POST'])
+@user_login_required
+def process_inventory_month():
+
+    user_id = current_user.id
+    data = request.json
+    month = data.get('month')
+    year = data.get('year')
+
+
+    if not month or not year or not user_id:
+        return jsonify({"error": "Month, year, and user ID are required."}), 400
+
+    # Convert to datetime for easier manipulation
+    current_month_date = datetime(year, month, 1)
+    previous_month_date = current_month_date - timedelta(days=1)
+
+    # Get the previous month and year
+    previous_month = previous_month_date.month
+    previous_year = previous_month_date.year
+
+    # Query inventory records for the current and previous month
+    current_month_records = InventoryRecord.query.filter_by(
+        month=month, year=year, user_id=user_id
+    ).all()
+
+    previous_month_records = InventoryRecord.query.filter_by(
+        month=previous_month, year=previous_year, user_id=user_id
+    ).all()
+
+    if not current_month_records:
+        return jsonify({"error": "No records found for the specified month and year."}), 404
+
+    if not previous_month_records:
+        return jsonify({"error": "No records found for the previous month."}), 404
+
+    task = create_inventory_journals.apply_async(
+        args=[serialize_records(current_month_records), serialize_records(previous_month_records), user_id, month, year]
+    )
+
+
+    return jsonify({"success": True, "task_id": task.id})
+
+
+def serialize_records(records):
+    """Helper function to serialize inventory records for the Celery task."""
+    return [
+        {
+            "id": record.id,
+            "store_name": record.store_name,
+            "amount": record.amount,
+            "processed": record.processed,
+            "month": record.month,
+            "year": record.year,
+        }
+        for record in records
+    ]

@@ -1,17 +1,18 @@
 
 
 -- Verify the data
-SELECT * FROM task_schedules;
 
 
-DELETE FROM supplier_invoice_record;
+DELETE FROM inventory_record;
 
+CREATE TABLE inventory_record (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    month INTEGER NOT NULL,
+    year INTEGER NOT NULL,
+    store_name VARCHAR(255) NOT NULL,
+    amount FLOAT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES user (id)
+);
 
-UPDATE xero_tenant
-SET tenant_name = 'J & R Corporation Limited'
-WHERE tenant_name = 'J&R Corporation Limited';
-
-
-SELECT *
-FROM supplier_invoice_record
-WHERE invoice_number = 'HD 658020194';

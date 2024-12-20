@@ -49,7 +49,9 @@ from app.xero import (
     post_recharge_sales_invoice_xero, 
     get_inbox_files_from_management_company,
     rename_file,
-    update_invoice_records
+    update_invoice_records,
+    process_inventory_file,
+    create_inventory_journals_in_xero
 
 )
 
@@ -2639,6 +2641,133 @@ def upload_recharge_invoices_xero_task(self, user_id, purchase_csv_content, brea
         current_app.logger.error(f"Error in upload_recharge_invoices_xero_task: {str(e)}")
         self.update_state(state='FAILURE', meta={'error': str(e), 'exc_type': type(e).__name__})
         raise
+
+
+
+##########################Inventory######################################
+
+@shared_task(bind=True)
+def process_inventory_task(self, user_id):
+    """
+    Processes the uploaded Excel files to update the inventory records and produce journals in Xero.
+    """
+    from datetime import datetime
+
+    user = User.query.get(user_id)
+    task_status = TaskStatus.query.filter_by(task_id=self.request.id).first()
+
+    if task_status:
+        task_status.status = 'in_progress'
+        task_status.result = "Task started."
+        db.session.commit()
+
+    data, management_tenant_id = get_inbox_files_from_management_company(user)
+    error_messages = []
+    to_be_processed = []
+
+    if data:
+        for tenant in data:
+            tenant_id = tenant['tenant_id']
+
+            # Create folders if they don't exist
+            processed_folder = create_folder_if_not_exists('Inventory - Processed', tenant_id, user)
+            rejected_folder = create_folder_if_not_exists('Inventory - Rejected', tenant_id, user)
+
+            processed_folder_id = processed_folder.id
+            rejected_folder_id = rejected_folder.id
+
+            for file in tenant['files']:
+                if "Inventory_Record" in file['file_name']:
+                    to_be_processed.append((file, tenant_id, processed_folder_id, rejected_folder_id))
+
+        # Process each file
+        for file, tenant_id, processed_folder_id, rejected_folder_id in to_be_processed:
+            file_content = fetch_file_content(user, tenant_id, file['file_id'])
+            result = process_inventory_file(
+                user=user,
+                file=file,
+                processed_folder_id=processed_folder_id,
+                rejected_folder_id=rejected_folder_id,
+                tenant_id=tenant_id,
+                file_content=file_content
+            )
+            if "error" in result:
+                error_messages.append(result["error"])
+
+    if task_status:
+        task_status.status = 'completed' if not error_messages else 'failed'
+        task_status.result = "Task completed with errors." if error_messages else "Task completed successfully."
+        task_status.progress = 100
+        db.session.commit()
+
+    return {"errors": error_messages} if error_messages else {"message": "Task completed successfully."}
+
+@shared_task(bind=True)
+def create_inventory_journals(self, current_month_records, previous_month_records, user_id, month, year):
+    from app.models import TrackingCategoryModel
+    import pandas as pd
+
+    user = User.query.get(user_id)
+    
+    # Step 1: Create DataFrames from current and previous month records
+    current_df = pd.DataFrame(current_month_records)
+    previous_df = pd.DataFrame(previous_month_records)
+
+    # Step 2: Merge DataFrames on 'store_name'
+    merged_df = pd.merge(
+        current_df, 
+        previous_df, 
+        on='store_name', 
+        how='left', 
+        suffixes=('_current', '_previous')
+    )
+
+    # Step 3: Calculate the difference column
+    merged_df['difference'] = merged_df['amount_current'] - merged_df['amount_previous']
+
+    # Step 4: Query tracking codes from the database
+    tracking_codes = TrackingCategoryModel.query.filter_by(user_id=user_id).all()
+    tracking_code_map = {
+        tc.tracking_category_option: {
+            "company_name": tc.tenant_name,
+            "tracking_option_id": tc.tracking_option_id,
+            "tracking_category_id": tc.tracking_category_id
+        }
+        for tc in tracking_codes
+    }
+
+    # Step 5: Map company_name, tracking_option_id, and tracking_category_id to merged DataFrame
+    merged_df['company_name'] = merged_df['store_name'].map(
+        lambda store_name: tracking_code_map.get(store_name, {}).get('company_name', None)
+    )
+    merged_df['tracking_option_id'] = merged_df['store_name'].map(
+        lambda store_name: tracking_code_map.get(store_name, {}).get('tracking_option_id', None)
+    )
+    merged_df['tracking_category_id'] = merged_df['store_name'].map(
+        lambda store_name: tracking_code_map.get(store_name, {}).get('tracking_category_id', None)
+    )
+
+    # Step 6: Finalize the columns
+    final_df = merged_df[[
+        'store_name', 
+        'amount_current', 
+        'amount_previous', 
+        'difference', 
+        'company_name', 
+        'tracking_option_id',
+        'tracking_category_id', 
+    ]]
+
+    # Step 7: Pass the final DataFrame to the processing function
+    create_inventory_journals_in_xero(final_df, user, month, year)
+
+    return {"status": "success"}
+
+
+
+
+
+
 
 
 ##########################RECHARGING######################################

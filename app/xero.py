@@ -11,7 +11,7 @@ from xero_python.api_client.oauth2 import OAuth2Token
 import json
 import time
 from functools import wraps
-from app.models import XeroTenant, Company, DomPurchaseInvoicesTenant, StoreAccountCodes, TrackingCategoryModel, InvoiceRecord, SupplierInvoiceRecord
+from app.models import XeroTenant, Company, DomPurchaseInvoicesTenant, StoreAccountCodes, TrackingCategoryModel, InvoiceRecord, SupplierInvoiceRecord, InventoryRecord
 from datetime import datetime, timedelta
 import pandas as pd
 from decimal import Decimal, ROUND_HALF_UP
@@ -23,9 +23,10 @@ import dateutil.parser
 import os
 from dotenv import load_dotenv
 from sqlalchemy import or_
+from sqlalchemy.exc import SQLAlchemyError
 
 
-from xero_python.accounting import AccountingApi, Account, Accounts, AccountType, Allocation, Allocations, BatchPayment, BatchPayments, BankTransaction, BankTransactions, BankTransfer, BankTransfers, Contact, Contacts, ContactGroup, ContactGroups, ContactPerson, CreditNote, CreditNotes, Currency, Currencies, CurrencyCode, Employee, Employees, ExpenseClaim, ExpenseClaims, HistoryRecord, HistoryRecords, Invoice, Invoices, Item, Items, LineAmountTypes, LineItem, Payment, Payments, PaymentService, PaymentServices, Phone, Purchase, Quote, Quotes, Receipt, Receipts, RepeatingInvoice, RepeatingInvoices, Schedule, TaxComponent, TaxRate, TaxRates, TaxType, TrackingCategory, TrackingCategories, TrackingOption, TrackingOptions, User, Users, LineItemTracking
+from xero_python.accounting import AccountingApi, Account, Accounts, AccountType, Allocation, Allocations, BatchPayment, BatchPayments, BankTransaction, BankTransactions, BankTransfer, BankTransfers, Contact, Contacts, ContactGroup, ContactGroups, ContactPerson, CreditNote, CreditNotes, Currency, Currencies, CurrencyCode, Employee, Employees, ExpenseClaim, ExpenseClaims, HistoryRecord, HistoryRecords, Invoice, Invoices, Item, Items, LineAmountTypes, LineItem, Payment, Payments, PaymentService, PaymentServices, Phone, Purchase, Quote, Quotes, Receipt, Receipts, RepeatingInvoice, RepeatingInvoices, Schedule, TaxComponent, TaxRate, TaxRates, TaxType, TrackingCategory, TrackingCategories, TrackingOption, TrackingOptions, User, Users, LineItemTracking, ManualJournalLine, ManualJournals, ManualJournal
 from xero_python.assets import AssetApi, Asset, AssetStatus, AssetStatusQueryParam, AssetType, BookDepreciationSetting
 from xero_python.project import ProjectApi, Amount, ChargeType, Projects, ProjectCreateOrUpdate, ProjectPatch, ProjectStatus, ProjectUsers, Task, TaskCreateOrUpdate, TimeEntryCreateOrUpdate
 from xero_python.payrollau import PayrollAuApi, Employees, Employee, EmployeeStatus,State, HomeAddress
@@ -718,10 +719,12 @@ def aggregate_auto_workflows_data(user):
     total_files = 0
     purchase_invoices_count = 0
     sales_invoices_count = 0
+    inventory_journals_count = 0
 
     tenant_file_data = {
         "purchase_invoices_tenants": [],
-        "sales_invoices_tenants": []
+        "sales_invoices_tenants": [],
+        "inventory_tenants": []
     }
 
     # Get allowed tenants for the current user session
@@ -745,7 +748,7 @@ def aggregate_auto_workflows_data(user):
                 file_count = len(filtered_files)
                 total_files += file_count
 
-                # Count Dom Purchase Invoices (matching .csv and .pdf with "CustAccountStatementExt.Report")
+                # Count Dom Purchase Invoices
                 dom_purchase_invoice_count = 0
                 dom_purchase_files = [file for file in filtered_files if "CustAccountStatementExt.Report" in file.name and (file.name.endswith(".csv") or file.name.endswith(".pdf"))]
 
@@ -759,13 +762,18 @@ def aggregate_auto_workflows_data(user):
                 purchase_invoices_count += dom_purchase_invoice_count
                 tenant_file_data["purchase_invoices_tenants"].append({"name": connection.tenant_name, "file_count": dom_purchase_invoice_count})
 
-                # Count Dom Sales Invoices (matching .xls files with "KeyIndicatorsStore")
+                # Count Dom Sales Invoices
                 sales_invoice_count = len([file for file in filtered_files if file.name.startswith("KeyIndicatorsStore") and file.name.endswith(".xls")])
                 sales_invoices_count += sales_invoice_count
                 tenant_file_data["sales_invoices_tenants"].append({"name": connection.tenant_name, "file_count": sales_invoice_count})
 
+                # Count Inventory Files (matching "InventoryRecord" in the filename)
+                inventory_count = len([file for file in filtered_files if "Inventory" in file.name])
+                inventory_journals_count += inventory_count
+                tenant_file_data["inventory_tenants"].append({"name": connection.tenant_name, "file_count": inventory_count})
+
                 # Log per tenant for files
-                workflow_log.append(f"{connection.tenant_name}: {file_count} total files, {dom_purchase_invoice_count} Dom Purchase Invoices, {sales_invoice_count} Dom Sales Invoices")
+                workflow_log.append(f"{connection.tenant_name}: {file_count} total files, {dom_purchase_invoice_count} Dom Purchase Invoices, {sales_invoice_count} Dom Sales Invoices, {inventory_count} Inventory Journals")
 
             except HTTPStatusException as e:
                 workflow_log.append(f"Error fetching files for tenant {connection.tenant_name}: {e}")
@@ -777,9 +785,12 @@ def aggregate_auto_workflows_data(user):
         "workflow_log": workflow_log,
         "purchase_invoices_count": purchase_invoices_count,
         "sales_invoices_count": sales_invoices_count,
+        "inventory_journals_count": inventory_journals_count,
         "purchase_invoices_tenants": tenant_file_data["purchase_invoices_tenants"],
-        "sales_invoices_tenants": tenant_file_data["sales_invoices_tenants"]
+        "sales_invoices_tenants": tenant_file_data["sales_invoices_tenants"],
+        "inventory_tenants": tenant_file_data["inventory_tenants"]
     })
+
 
 
 
@@ -2892,3 +2903,215 @@ def update_invoice_records(user):
 
     
 
+def process_inventory_file(user, file, processed_folder_id, rejected_folder_id, tenant_id, file_content):
+    """
+    Processes the inventory Excel file content, checks for duplicates, ensures all amounts are present, and updates the database.
+    """
+    try:
+        # Read the Excel file into a Pandas DataFrame
+        df = pd.read_excel(file_content, header=None)
+
+        # Ensure the second row first column (A2) contains a valid date
+        date_value = df.iloc[1, 0]  # Assuming "Last Day of Month" is in A2
+        date_value = pd.to_datetime(date_value, errors='coerce')
+        if pd.isnull(date_value):
+            error_message = "The 'Last Day of Month' value is not a valid date."
+            move_and_rename_file(
+                file_id=file['file_id'],
+                new_folder_id=rejected_folder_id,
+                new_name=f"Rejected_InvalidDate_{file['file_name']}",
+                file_type="Inventory Record",
+                user=user,
+                tenant_id=tenant_id
+            )
+            return {"error": error_message}
+
+        # Extract the month and year
+        month = date_value.month
+        year = date_value.year
+
+        # Extract the store data, skipping irrelevant rows
+        df = pd.read_excel(file_content, skiprows=3, header=0, names=["Store Name", "Amount"])
+
+        # Check if all rows have valid numeric amounts
+        if df['Amount'].isnull().any() or not df['Amount'].apply(lambda x: isinstance(x, (int, float))).all():
+            error_message = "Some rows have missing or invalid amounts. Rejecting the entire file."
+            move_and_rename_file(
+                file_id=file['file_id'],
+                new_folder_id=rejected_folder_id,
+                new_name=f"Rejected_MissingEntries_{file['file_name']}",
+                file_type="Inventory Record",
+                user=user,
+                tenant_id=tenant_id
+            )
+            return {"error": error_message}
+
+        # Check for duplicates in the database
+        existing_records = InventoryRecord.query.filter_by(user_id=user.id, month=month, year=year).all()
+        if existing_records:
+            error_message = f"Duplicate records found for user {user.id} for {month}/{year}. File rejected."
+            move_and_rename_file(
+                file_id=file['file_id'],
+                new_folder_id=rejected_folder_id,
+                new_name=f"Rejected_Duplicate_{file['file_name']}",
+                file_type="Inventory Record",
+                user=user,
+                tenant_id=tenant_id
+            )
+            return {"error": error_message}
+
+        # Add new records to the database
+        new_records = [
+            InventoryRecord(
+                user_id=user.id,
+                month=month,
+                year=year,
+                store_name=row['Store Name'],
+                amount=float(row['Amount'])
+            )
+            for _, row in df.iterrows()
+        ]
+
+        db.session.add_all(new_records)
+        db.session.commit()
+
+        # Move the file to the processed folder
+        move_and_rename_file(
+            file_id=file['file_id'],
+            new_folder_id=processed_folder_id,
+            new_name=f"Processed_{file['file_name']}",
+            file_type="Inventory Record",
+            user=user,
+            tenant_id=tenant_id
+        )
+
+        return {"success": f"Successfully added {len(new_records)} records to the database."}
+
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        error_message = f"Database error: {str(e)}"
+        move_and_rename_file(
+            file_id=file['file_id'],
+            new_folder_id=rejected_folder_id,
+            new_name=f"Rejected_DatabaseError_{file['file_name']}",
+            file_type="Inventory Record",
+            user=user,
+            tenant_id=tenant_id
+        )
+        return {"error": error_message}
+
+    except Exception as e:
+        error_message = f"Error processing inventory file: {str(e)}"
+        move_and_rename_file(
+            file_id=file['file_id'],
+            new_folder_id=rejected_folder_id,
+            new_name=f"Rejected_Error_{file['file_name']}",
+            file_type="Inventory Record",
+            user=user,
+            tenant_id=tenant_id
+        )
+        return {"error": error_message}
+
+ 
+def create_inventory_journals_in_xero(final_df, user, month, year):
+    from collections import defaultdict
+    from datetime import datetime
+
+    # Get Xero client and API instance
+    api_client, xero_app = get_xero_client_for_user(user)
+    accounting_api = AccountingApi(api_client)
+
+
+     # Query XeroTenant table to map company_name to tenant_id
+    tenant_map = {
+        tenant.tenant_name: tenant.tenant_id
+        for tenant in XeroTenant.query.filter_by(user_id=user.id).all()
+    }
+
+    # Dictionary to hold journal lines grouped by company_name
+    grouped_journal_lines = defaultdict(list)
+
+    for _, row in final_df.iterrows():
+        # Skip rows where the difference is 0
+        if row['difference'] == 0:
+            continue
+
+        tracking = [
+            TrackingCategory(
+                tracking_category_id=row['tracking_category_id'],
+                tracking_option_id=row['tracking_option_id']
+            )
+        ]
+
+
+        # Create the manual journal lines based on the difference
+        if row['difference'] < 0:
+            # Create credit line for account 1001
+            credit_line = ManualJournalLine(
+                line_amount=-abs(row['difference']),  
+                account_code="1001",
+                description=f"Credit for {row['store_name']} - {row['company_name']}", 
+                tracking = tracking
+            )
+            grouped_journal_lines[row['company_name']].append(credit_line)
+
+            # Create debit line for account 5050
+            debit_line = ManualJournalLine(
+                line_amount=abs(row['difference']),  
+                account_code="5050",
+                description=f"Debit for {row['store_name']} - {row['company_name']}",
+                tracking = tracking
+            )
+            grouped_journal_lines[row['company_name']].append(debit_line)
+
+        elif row['difference'] > 0:
+            # Create debit line for account 1001
+            debit_line = ManualJournalLine(
+                line_amount=abs(row['difference']),  
+                account_code="1001",
+                description=f"Debit for {row['store_name']} - {row['company_name']}",
+                tracking = tracking
+            )
+            grouped_journal_lines[row['company_name']].append(debit_line)
+
+            # Create credit line for account 5050
+            credit_line = ManualJournalLine(
+                line_amount=-abs(row['difference']),  
+                account_code="5050",
+                description=f"Credit for {row['store_name']} - {row['company_name']}",
+                tracking = tracking
+            )
+
+            grouped_journal_lines[row['company_name']].append(credit_line)
+
+    # Create ManualJournal entries for each company
+    manual_journals = []
+
+    # Create ManualJournal entries for each company
+    for company_name, journal_lines in grouped_journal_lines.items():
+
+        # Get the corresponding tenant_id for the company
+        xero_tenant_id = tenant_map.get(company_name)
+        if not xero_tenant_id:
+            print(f"Skipping {company_name}: No matching Xero tenant found.")
+            continue
+
+        manual_journal = ManualJournal(
+            narration=f"Inventory Adjustment for {month} {year} - {company_name}",
+            date=datetime.utcnow(),
+            journal_lines=journal_lines,
+            status="DRAFT" 
+        )
+
+        # Create the manual journal in Xero
+        manual_journals = ManualJournals(manual_journals=[manual_journal])
+        try:
+            api_response = accounting_api.create_manual_journals(
+                xero_tenant_id,
+                manual_journals,
+            )
+            print(f"Successfully created manual journal for {company_name}: {api_response}")
+        except Exception as e:
+            print(f"Failed to create manual journal for {company_name}: {e}")
+
+    print(f"Processed manual journals for {len(grouped_journal_lines)} companies.")

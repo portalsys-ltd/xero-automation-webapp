@@ -279,6 +279,18 @@ class TaskSchedule(db.Model):
     arguments = db.Column(db.String, nullable=True)  # Store arguments as a string
 
 
+class InventoryRecord(db.Model):
+    __tablename__ = 'inventory_record'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)  # Associate with user
+    month = db.Column(db.Integer, nullable=False)  # Month of the record
+    year = db.Column(db.Integer, nullable=False)  # Year of the record
+    store_name = db.Column(db.String(255), nullable=False)  # Store name
+    amount = db.Column(db.Float, nullable=False)  # Amount for the store
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)  # Timestamp for record creation
+    processed = db.Column(db.Boolean, default=False)  # True if processed, False otherwise
+
 
 
 #---------------------------------------------------------------------------tables----------------------------------------------------------------------------#

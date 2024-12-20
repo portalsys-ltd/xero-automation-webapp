@@ -19,6 +19,9 @@ Auto Workflows
             <li class="nav-item">
                 <a class="nav-link" id="dom-sales-tab" data-toggle="tab" href="#dom-sales" role="tab" aria-controls="dom-sales" aria-selected="false">Dom Sales Invoices</a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link" id="inventory-tab" data-toggle="tab" href="#inventory" role="tab" aria-controls="inventory" aria-selected="false">Inventory</a>
+            </li>
         </ul>
 
 
@@ -66,7 +69,18 @@ Auto Workflows
                             </div>
                         </div>
 
-                    
+                        <!-- Inventory Card -->
+                        <div class="col-md-4">
+                            <div class="card text-center mb-4">
+                                <div class="card-body">
+                                    <i id="inventory-icon" class="fas fa-box-open fa-2x mb-3"></i>
+                                    <h5 class="card-title">Inventory</h5>
+                                    <p class="lead"><span id="inventory-count" class="file-count">0</span> journals</p>
+                                    <button class="btn btn-primary" onclick="toggleList('inventory-tenants-list')">View Details</button>
+                                    <ul id="inventory-tenants-list" class="tenant-list mt-3"></ul>
+                                </div>
+                            </div>
+                        </div>
 
                     </div>
                 </div>
@@ -344,12 +358,69 @@ Auto Workflows
             </div>
 
 
-         
 
+            <!-- Inventory Processing -->
+            <div class="tab-pane fade" id="inventory" role="tabpanel" aria-labelledby="inventory-tab">
+                <div class="inventory-section container mt-4">
+                    <h2>Inventory Section</h2>
+
+                    <div class="card mb-4 shadow-sm">
+                        <div class="card-header bg-info text-white">
+                            <h4 class="mb-0">Create Inventory Template</h4>
+                        </div>
+                        <div class="card-body text-center">
+                            <button id="create-template-btn" class="btn btn-primary" onclick="downloadInventoryTemplate()">Create and Download</button>
+                        </div>
+                    </div>
             
+                    <!-- Processing Section -->
+                    <div class="card mb-4 shadow-sm">
+                        <div class="card-header bg-info text-white">
+                            <h4 class="mb-0">Processing Section</h4>
+                        </div>
+                        <div class="card-body">
+                            <button id="process-inventory-btn" class="btn btn-primary mb-3" onclick="processInventoryData()">
+                                Process Inventory Data
+                            </button>
+                            <div id="inventory-progress-container" class="progress mt-3" style="display:none;">
+                                <div id="inventory-progress-bar" class="progress-bar progress-bar-striped" style="width: 0%;"></div>
+                            </div>
+                            <p id="inventory-progress-text" class="mt-2">0% Complete</p>
+                            <p id="inventory-task-status" class="mt-3 text-muted"></p>
+                            
+                            <!-- Process Task Errors -->
+                            <div id="inventory-task-errors" class="alert alert-danger mt-3" style="display: none;">
+                                <h5>Task Errors:</h5>
+                                <ul id="inventory-error-list" class="mb-0"></ul>
+                            </div>
+                        </div>
+                    </div>
+
+                     <!-- Inventory Status Table -->
+                    <div class="card mb-4 shadow-sm">
+                        <div class="card-header bg-info text-white">
+                            <h4 class="mb-0">Inventory Status</h4>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table id="inventory-status-table" class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Month</th>
+                                            <th>Year</th>
+                                            <th>Data Complete</th>
+                                            <th>Processed</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Data dynamically inserted here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
             
-
-
         </div>
     </div>
 
@@ -446,10 +517,11 @@ Auto Workflows
                 .then(response => response.json())
                 .then(data => {
                     if (data.status === 'no_active_task') {
-                        enableButtons(['pre-process-btn', 'process-btn', 'process-sales-btn']);
+                        enableButtons(['pre-process-btn', 'process-btn', 'process-sales-btn', 'process-inventory-btn']);
                         document.getElementById('pre-process-task-status').textContent = 'Ready to process';
                         document.getElementById('process-task-status').textContent = 'Ready to process';
                         document.getElementById('sales-task-status').textContent = 'Ready to process';
+                        document.getElementById('inventory-task-status').textContent = 'Ready to process';
                         return;
                     }
 
@@ -463,10 +535,14 @@ Auto Workflows
                     } else if (taskType === 'pre_process_dom_sales_invoices' || taskType === 'process_dom_sales') {
                         disableButtons(['process-sales-btn']);
                         trackTaskProgress(taskId, 'sales');
+                    } else if (taskType === 'process_inventory') {
+                        disableButtons(['process-inventory-btn']);
+                        trackTaskProgress(taskId, 'inventory');
                     }
                 })
                 .catch(error => console.error('Error checking active task:', error));
         }
+
 
         function disableButtons(buttonIds) {
             buttonIds.forEach(id => {
@@ -571,11 +647,13 @@ Auto Workflows
                     // Set file counts and color indicators
                     setFileCountAndColor('purchase-invoices-count', 'purchase-invoices-icon', data.purchase_invoices_count);
                     setFileCountAndColor('sales-invoices-count', 'sales-invoices-icon', data.sales_invoices_count);
+                    setFileCountAndColor('inventory-count', 'inventory-icon', data.inventory_journals_count);
                     
 
                     // Populate tenant lists
                     populateTenantList('purchase-tenants-list', data.purchase_invoices_tenants);
                     populateTenantList('sales-tenants-list', data.sales_invoices_tenants);
+                    populateTenantList('inventory-tenants-list', data.inventory_tenants);
          
                 })
                 .catch(error => console.error('Error fetching file overview data:', error));
@@ -694,6 +772,7 @@ Auto Workflows
             fetchDomPurchaseInvoiceLogs();
             fetchDomSalesInvoiceLogs();
             checkActiveTask();
+            loadInventoryStatus();
         };
 
         setInterval(function() {
@@ -898,6 +977,7 @@ Auto Workflows
                         if (data.state === 'SUCCESS' || data.state === 'FAILURE') {
                             enablePurcahseInvoiceButtons();
                             enableButtons(['process-sales-btn']);
+                            enableButtons(['process-inventory-btn']);
                             if (data.errors && data.errors.length > 0) {
                                 errorList.innerHTML = '';
                                 data.errors.forEach(error => {
@@ -1077,6 +1157,105 @@ Auto Workflows
             });
         }
 
+        function processInventoryData() {
+            document.getElementById('inventory-task-status').textContent = "Task is running...";
+            document.getElementById('inventory-progress-container').style.display = "block";
+
+            fetch('/auto_workflows/process_inventory_data')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.task_id) {
+                        trackTaskProgress(data.task_id, 'inventory');
+                    } else {
+                        document.getElementById('inventory-task-status').textContent = "Error starting task.";
+                    }
+                })
+                .catch(error => {
+                    console.error('Error starting task:', error);
+                    document.getElementById('inventory-task-status').textContent = "Error starting task.";
+                });
+        }
+
+
+        function downloadInventoryTemplate() {
+            fetch('/auto_workflows/create_inventory_template')
+                .then(response => {
+                    if (response.ok) {
+                        return response.blob();
+                    } else {
+                        alert("Error creating template.");
+                        throw new Error("Failed to create template.");
+                    }
+                })
+                .then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.style.display = "none";
+                    a.href = url;
+                    a.download = "Inventory_Record.xlsx";
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                })
+                .catch(error => console.error("Error downloading template:", error));
+        }
+
+        // Fetch and display inventory status
+        function loadInventoryStatus() {
+            fetch('/auto_workflows/get_inventory_status') // Replace with your backend endpoint
+                .then(response => response.json())
+                .then(data => {
+                    const tableBody = document.querySelector('#inventory-status-table tbody');
+                    tableBody.innerHTML = ''; // Clear previous content
+
+                    if (data.error) {
+                        alert("Error: " + data.error);
+                        return;
+                    }
+
+                    data.forEach(record => {
+                        const dataComplete = record.data_complete ? '<span style="color: green;">✔</span>' : '<span style="color: red;">✘</span>';
+                        const processed = record.processed ? '<span style="color: green;">✔</span>' : '<span style="color: red;">✘</span>';
+                        const actionButton = !record.processed
+                            ? `<button class="btn btn-primary btn-sm" onclick="processInventoryMonth(${record.month}, ${record.year})">Process</button>`
+                            : '<span class="text-muted">Processed</span>';
+
+                        const row = `
+                            <tr>
+                                <td>${record.month}</td>
+                                <td>${record.year}</td>
+                                <td>${dataComplete}</td>
+                                <td>${processed}</td>
+                                <td>${actionButton}</td>
+                            </tr>`;
+                        tableBody.innerHTML += row;
+                    });
+                })
+                .catch(error => console.error('Error fetching inventory status:', error));
+        }
+
+        // Process inventory for a specific month and year
+        function processInventoryMonth(month, year) {
+            if (!confirm(`Are you sure you want to process inventory for ${month}/${year}?`)) {
+                return;
+            }
+
+            fetch('/auto_workflows/process_inventory_month', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ month, year })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(`Inventory for ${month}/${year} processed successfully!`);
+                        loadInventoryStatus(); // Refresh table
+                    } else {
+                        alert(`Error: ${data.error}`);
+                    }
+                })
+                .catch(error => console.error('Error processing inventory:', error));
+        }
 
 
 
