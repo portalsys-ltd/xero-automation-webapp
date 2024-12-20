@@ -642,11 +642,30 @@ def get_inventory_status():
             "month": record.month,
             "year": record.year,
             "data_complete": record.record_count > 0,  # Example logic for completeness
-            "processed": record.processed_count == record.record_count
+            "processed": record.processed_count == record.record_count,  # All processed
+            "processed_count": record.processed_count or 0,  # Handle null case
+            "total_count": record.record_count
         }
         for record in records
     ]
     return jsonify(result)
+
+@auto_workflows_bp.route('/get_unprocessed_stores', methods=['GET'])
+def get_unprocessed_stores():
+    month = request.args.get('month', type=int)
+    year = request.args.get('year', type=int)
+
+    if not month or not year:
+        return jsonify({"error": "Month and year are required"}), 400
+
+    unprocessed_stores = InventoryRecord.query.filter_by(
+        month=month,
+        year=year,
+        processed=False
+    ).with_entities(InventoryRecord.store_name).distinct().all()
+
+    return jsonify({"month": month, "year": year, "unprocessed_stores": [store.store_name for store in unprocessed_stores]})
+
 
 
 

@@ -24,6 +24,11 @@ import os
 from dotenv import load_dotenv
 from sqlalchemy import or_
 from sqlalchemy.exc import SQLAlchemyError
+from calendar import monthrange
+import calendar
+import csv
+import io
+from calendar import month_abbr
 
 
 from xero_python.accounting import AccountingApi, Account, Accounts, AccountType, Allocation, Allocations, BatchPayment, BatchPayments, BankTransaction, BankTransactions, BankTransfer, BankTransfers, Contact, Contacts, ContactGroup, ContactGroups, ContactPerson, CreditNote, CreditNotes, Currency, Currencies, CurrencyCode, Employee, Employees, ExpenseClaim, ExpenseClaims, HistoryRecord, HistoryRecords, Invoice, Invoices, Item, Items, LineAmountTypes, LineItem, Payment, Payments, PaymentService, PaymentServices, Phone, Purchase, Quote, Quotes, Receipt, Receipts, RepeatingInvoice, RepeatingInvoices, Schedule, TaxComponent, TaxRate, TaxRates, TaxType, TrackingCategory, TrackingCategories, TrackingOption, TrackingOptions, User, Users, LineItemTracking, ManualJournalLine, ManualJournals, ManualJournal
@@ -3028,6 +3033,12 @@ def create_inventory_journals_in_xero(final_df, user, month, year):
         for tenant in XeroTenant.query.filter_by(user_id=user.id).all()
     }
 
+    # Calculate previous month and year
+    if month == 1:
+        prev_month, prev_year = 12, year - 1
+    else:
+        prev_month, prev_year = month - 1, year
+
     # Dictionary to hold journal lines grouped by company_name
     grouped_journal_lines = defaultdict(list)
 
@@ -3050,7 +3061,7 @@ def create_inventory_journals_in_xero(final_df, user, month, year):
             credit_line = ManualJournalLine(
                 line_amount=-abs(row['difference']),  
                 account_code="1001",
-                description=f"Credit for {row['store_name']} - {row['company_name']}", 
+                description=f"Stock Movement for {row['store_name']} {calendar.month_name[month]} {year}", 
                 tracking = tracking
             )
             grouped_journal_lines[row['company_name']].append(credit_line)
@@ -3059,7 +3070,7 @@ def create_inventory_journals_in_xero(final_df, user, month, year):
             debit_line = ManualJournalLine(
                 line_amount=abs(row['difference']),  
                 account_code="5050",
-                description=f"Debit for {row['store_name']} - {row['company_name']}",
+                description=f"Stock Movement for {row['store_name']} {calendar.month_name[month]} {year}",
                 tracking = tracking
             )
             grouped_journal_lines[row['company_name']].append(debit_line)
@@ -3069,7 +3080,7 @@ def create_inventory_journals_in_xero(final_df, user, month, year):
             debit_line = ManualJournalLine(
                 line_amount=abs(row['difference']),  
                 account_code="1001",
-                description=f"Debit for {row['store_name']} - {row['company_name']}",
+                description=f"Stock Movement for {row['store_name']} {calendar.month_name[month]} {year}",
                 tracking = tracking
             )
             grouped_journal_lines[row['company_name']].append(debit_line)
@@ -3078,7 +3089,7 @@ def create_inventory_journals_in_xero(final_df, user, month, year):
             credit_line = ManualJournalLine(
                 line_amount=-abs(row['difference']),  
                 account_code="5050",
-                description=f"Credit for {row['store_name']} - {row['company_name']}",
+                description=f"Stock Movement for {row['store_name']} {calendar.month_name[month]} {year}",
                 tracking = tracking
             )
 
@@ -3096,20 +3107,114 @@ def create_inventory_journals_in_xero(final_df, user, month, year):
             print(f"Skipping {company_name}: No matching Xero tenant found.")
             continue
 
+        # Calculate the last day of the month
+        last_day = monthrange(year, month)[1]
+        journal_date = datetime(year, month, last_day)
+
         manual_journal = ManualJournal(
-            narration=f"Inventory Adjustment for {month} {year} - {company_name}",
-            date=datetime.utcnow(),
+            narration=f"Stock Movement for {calendar.month_name[month]} {year} - {company_name}",
+            date=journal_date,
             journal_lines=journal_lines,
             status="DRAFT" 
         )
 
         # Create the manual journal in Xero
         manual_journals = ManualJournals(manual_journals=[manual_journal])
+
         try:
             api_response = accounting_api.create_manual_journals(
                 xero_tenant_id,
                 manual_journals,
             )
+
+            manual_journal_id = api_response.manual_journals[0].manual_journal_id
+
+            # Step 1: Create a mapping of store_name to company_name using TrackingCategoryModel and update records to be processed
+            store_to_company_map = {
+                record.tracking_category_option: record.tenant_name
+                for record in TrackingCategoryModel.query.filter_by(user_id=user.id).all()
+            }
+
+            # Update inventory records for the processed month and company
+            processed_records = InventoryRecord.query.filter_by(
+                user_id=user.id,
+                month=month,
+                year=year
+            ).filter(
+                InventoryRecord.store_name.in_(
+                    [key for key, value in store_to_company_map.items() if value == company_name]
+                )
+            ).all()
+
+            # Update the processed status
+            for record in processed_records:
+                record.processed = True
+            db.session.commit()
+
+            
+
+
+            # Step 2: Modify the inventory data query to use the mapping
+            # Retrieve current and previous months' data for each store related to the company
+            inventory_data = InventoryRecord.query.filter(
+                InventoryRecord.user_id == user.id
+            ).order_by(InventoryRecord.year.desc(), InventoryRecord.month.desc()).all()
+
+            # Step 3: Filter and map inventory data based on the company_name
+            filtered_inventory_data = [
+                record for record in inventory_data
+                if store_to_company_map.get(record.store_name) == company_name
+            ]
+
+            # Step 4: Dynamically generate month/year column titles
+            prev_month_label = f"{month_abbr[prev_month]} {prev_year}"  # e.g., "Jun 2024"
+            current_month_label = f"{month_abbr[month]} {year}"  # e.g., "Jul 2024"
+
+            # Step 5: Aggregate data by store name
+            csv_data = {}
+            for record in filtered_inventory_data:
+                key = record.store_name
+                if key not in csv_data:
+                    csv_data[key] = {prev_month_label: 0, current_month_label: 0, "Difference": 0}
+                if record.year == year and record.month == month:
+                    csv_data[key][current_month_label] += record.amount
+                elif record.year == prev_year and record.month == prev_month:
+                    csv_data[key][prev_month_label] += record.amount
+
+            # Step 6: Calculate the difference
+            for store_name, amounts in csv_data.items():
+                amounts["Difference"] = amounts[current_month_label] - amounts[prev_month_label]
+
+            # Step 7: Generate CSV with dynamic column titles
+            csv_buffer = io.StringIO()
+            csv_writer = csv.writer(csv_buffer)
+            csv_writer.writerow(['Store Name', prev_month_label, current_month_label, 'Difference'])
+            for store_name, amounts in csv_data.items():
+                csv_writer.writerow([
+                    store_name,
+                    amounts[prev_month_label],
+                    amounts[current_month_label],
+                    amounts["Difference"]
+                ])
+            csv_content = csv_buffer.getvalue()
+            csv_buffer.close()
+
+            # Attach CSV to the journal as before
+            file_name = f"{company_name}_Inventory_{calendar.month_name[month]}_{year}.csv"
+            body = io.BytesIO(csv_content.encode())
+            body.seek(0)
+            binary_content = body.read()
+            accounting_api.create_manual_journal_attachment_by_file_name(
+                xero_tenant_id,
+                manual_journal_id,
+                file_name,
+                binary_content
+            )
+
+
+
+            print(f"Successfully created manual journal for {company_name} and attached CSV.")
+
             print(f"Successfully created manual journal for {company_name}: {api_response}")
         except Exception as e:
             print(f"Failed to create manual journal for {company_name}: {e}")

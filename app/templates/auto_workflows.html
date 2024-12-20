@@ -424,6 +424,25 @@ Auto Workflows
         </div>
     </div>
 
+    <!-- Modal -->
+    <div class="modal fade" id="unprocessedStoresModal" tabindex="-1" aria-labelledby="unprocessedStoresLabel" aria-hidden="true">
+        <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+            <h5 class="modal-title" id="unprocessedStoresLabel">Unprocessed Stores</h5>
+            <button type="button" class="btn-close" data-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+            <ul id="unprocessed-stores-list"></ul>
+            </div>
+            <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+        </div>
+    </div>
+    
+
     <style>
         
         /* Default icon and file count colors */
@@ -1200,7 +1219,6 @@ Auto Workflows
                 .catch(error => console.error("Error downloading template:", error));
         }
 
-        // Fetch and display inventory status
         function loadInventoryStatus() {
             fetch('/auto_workflows/get_inventory_status') // Replace with your backend endpoint
                 .then(response => response.json())
@@ -1214,18 +1232,25 @@ Auto Workflows
                     }
 
                     data.forEach(record => {
-                        const dataComplete = record.data_complete ? '<span style="color: green;">✔</span>' : '<span style="color: red;">✘</span>';
-                        const processed = record.processed ? '<span style="color: green;">✔</span>' : '<span style="color: red;">✘</span>';
-                        const actionButton = !record.processed
-                            ? `<button class="btn btn-primary btn-sm" onclick="processInventoryMonth(${record.month}, ${record.year})">Process</button>`
-                            : '<span class="text-muted">Processed</span>';
+                        const statusDisplay =
+                            record.processed_count === 0
+                                ? '<span style="color: red;">✘</span>'  // None processed
+                                : record.processed
+                                ? '<span style="color: green;">✔</span>'  // All processed
+                                : `<a href="#" onclick="showUnprocessedStores(${record.month}, ${record.year})">${record.processed_count}/${record.total_count}</a>`; // Partial processed
+
+                        const actionButton = record.processed
+                            ? '<span class="text-muted">Processed</span>'  // Fully processed
+                            : record.processed_count > 0
+                            ? '<span class="text-muted">Partially Processed</span>' // Partially processed
+                            : `<button class="btn btn-primary btn-sm" onclick="processInventoryMonth(${record.month}, ${record.year})">Process</button>`; // Not processed
 
                         const row = `
                             <tr>
                                 <td>${record.month}</td>
                                 <td>${record.year}</td>
-                                <td>${dataComplete}</td>
-                                <td>${processed}</td>
+                                <td>${record.data_complete ? '<span style="color: green;">✔</span>' : '<span style="color: red;">✘</span>'}</td>
+                                <td>${statusDisplay}</td>
                                 <td>${actionButton}</td>
                             </tr>`;
                         tableBody.innerHTML += row;
@@ -1233,6 +1258,38 @@ Auto Workflows
                 })
                 .catch(error => console.error('Error fetching inventory status:', error));
         }
+
+
+        function showUnprocessedStores(month, year) {
+            fetch(`/auto_workflows/get_unprocessed_stores?month=${month}&year=${year}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert("Error: " + data.error);
+                        return;
+                    }
+
+                    const modalTitle = document.querySelector('#unprocessedStoresLabel');
+                    const unprocessedList = document.querySelector('#unprocessed-stores-list');
+
+                    modalTitle.textContent = `Unprocessed Stores for ${data.month}/${data.year}, contact manager`;
+                    unprocessedList.innerHTML = ''; // Clear previous list
+
+                    if (data.unprocessed_stores.length === 0) {
+                        unprocessedList.innerHTML = '<li>All stores are processed!</li>';
+                    } else {
+                        data.unprocessed_stores.forEach(store => {
+                            unprocessedList.innerHTML += `<li>${store}</li>`;
+                        });
+                    }
+
+                    // Show the modal
+                    const modal = new bootstrap.Modal(document.getElementById('unprocessedStoresModal'));
+                    modal.show();
+                })
+                .catch(error => console.error('Error fetching unprocessed stores:', error));
+        }
+
 
         // Process inventory for a specific month and year
         function processInventoryMonth(month, year) {
