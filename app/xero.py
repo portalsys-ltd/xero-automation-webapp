@@ -1968,6 +1968,18 @@ def extract_coca_cola_invoice_data(user, invoice):
         # Extract text and check if it's a credit memo
         with pdfplumber.open(file_path) as pdf:
             text = "".join([page.extract_text() for page in pdf.pages])
+
+
+            
+            # Check if the document is a "Statement of Account"
+            if "PLEASE REMIT IMMEDIATELY" in text.upper() and "SHIP-TO & SOLD-TO" not in text.upper():
+                return {
+                    "invoice_type": "void",
+                    "invoice_id": invoice['invoice_id'],
+                    "tenant_id": tenant_id,
+                    "errors": errors  # Return any existing errors
+                }
+
             invoice_type = "credit_memo" if "CREDIT MEMO" in text else "invoice"
 
             # Extract Ship-to & Sold-to Address to get the store's postcode
@@ -2015,6 +2027,54 @@ def extract_coca_cola_invoice_data(user, invoice):
     except Exception as e:
         errors.append(str(e))
         return {"errors": errors}
+    
+def void_invoice(invoice_id, tenant_id, user):
+    """
+    Voids an invoice in Xero for the specified tenant and user.
+
+    Args:
+        invoice_id (str): The ID of the invoice to void.
+        tenant_id (str): The ID of the tenant where the invoice is located.
+        user (User): The user object with Xero API credentials.
+
+    Returns:
+        dict: A dictionary containing success or error details.
+    """
+    try:
+        # Get the Xero client for the user
+        api_client, _ = get_xero_client_for_user(user)
+        accounting_api = AccountingApi(api_client)
+
+        # Update the invoice status to VOIDED
+        updated_invoice = Invoice(
+            invoice_id=invoice_id,
+            status="VOIDED"  # Set the status to VOIDED
+        )
+
+        # Send the update request to Xero
+        accounting_api.update_invoice(tenant_id, invoice_id, updated_invoice)
+
+        # Log success
+        add_log(
+            f"Invoice {invoice_id} for tenant {tenant_id} successfully voided by user {user.username}.",
+            log_type="general",
+            user_id=user.id
+        )
+
+        return {"success": True, "message": f"Invoice {invoice_id} successfully voided."}
+
+    except HTTPStatusException as e:
+        # Handle Xero API HTTP errors
+        error_message = f"Failed to void invoice {invoice_id} for tenant {tenant_id}: {e.response.text}"
+        add_log(error_message, log_type="error", user_id=user.id)
+        return {"success": False, "message": error_message}
+
+    except Exception as e:
+        # Handle general exceptions
+        error_message = f"An error occurred while voiding invoice {invoice_id}: {str(e)}"
+        add_log(error_message, log_type="error", user_id=user.id)
+        return {"success": False, "message": error_message}
+
 
 
     

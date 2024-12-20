@@ -52,7 +52,8 @@ from app.xero import (
     update_invoice_records,
     process_inventory_file,
     create_inventory_journals_in_xero,
-    refresh_xero_token
+    refresh_xero_token,
+    void_invoice
 
 )
 
@@ -1812,6 +1813,12 @@ def process_cocacola_task(self, user_id):
         if data["invoice_type"] == "credit_memo":
             # Call the function to convert the credit memo to an invoice
             error = convert_invoice_to_credit_memo(data, user)
+
+        if data["invoice_type"] == "void":
+            invoice_id = data['invoice_id']
+            tenant_id = data['tenant_id']
+            void_invoice(invoice_id, tenant_id, user)
+
         else:
             # Call the function to assign tracking code to the invoice
             error = assign_tracking_code_to_invoice(data, user)

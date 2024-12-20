@@ -23,5 +23,8 @@ WHERE user_id = 1
   AND month = 12;
 
 
+DELETE FROM supplier_invoice_record;
+
+
 
 
