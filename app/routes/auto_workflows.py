@@ -630,12 +630,17 @@ def create_inventory_template():
 
 @auto_workflows_bp.route('/get_inventory_status', methods=['GET'])
 def get_inventory_status():
+    user_id = session.get('user_id')  # Assuming user_id is stored in the session
+
+    if not user_id:
+        return jsonify({"error": "User is not logged in"}), 401
+
     records = InventoryRecord.query.with_entities(
         InventoryRecord.month,
         InventoryRecord.year,
         db.func.count(InventoryRecord.id).label('record_count'),
         db.func.sum(InventoryRecord.processed.cast(db.Integer)).label('processed_count')
-    ).group_by(InventoryRecord.month, InventoryRecord.year).all()
+    ).filter_by(user_id=user_id).group_by(InventoryRecord.month, InventoryRecord.year).all()
 
     result = [
         {
@@ -650,8 +655,14 @@ def get_inventory_status():
     ]
     return jsonify(result)
 
+
 @auto_workflows_bp.route('/get_unprocessed_stores', methods=['GET'])
 def get_unprocessed_stores():
+    user_id = session.get('user_id')  # Assuming user_id is stored in the session
+
+    if not user_id:
+        return jsonify({"error": "User is not logged in"}), 401
+
     month = request.args.get('month', type=int)
     year = request.args.get('year', type=int)
 
@@ -659,12 +670,17 @@ def get_unprocessed_stores():
         return jsonify({"error": "Month and year are required"}), 400
 
     unprocessed_stores = InventoryRecord.query.filter_by(
+        user_id=user_id,
         month=month,
         year=year,
         processed=False
     ).with_entities(InventoryRecord.store_name).distinct().all()
 
-    return jsonify({"month": month, "year": year, "unprocessed_stores": [store.store_name for store in unprocessed_stores]})
+    return jsonify({
+        "month": month,
+        "year": year,
+        "unprocessed_stores": [store.store_name for store in unprocessed_stores]
+    })
 
 
 
