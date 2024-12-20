@@ -261,6 +261,7 @@ def process_dom_purchase_invoices_task(self, user_id, week):
     if task_status:
         task_status.status = 'in_progress'
         task_status.result = "task_started"
+        db.session.commit()  
     
 
     task_status = TaskStatus.query.filter_by(task_id=self.request.id).first()
@@ -679,11 +680,16 @@ def process_dom_purchase_invoices_task(self, user_id, week):
 
     add_log(f"Dom purchase invoice processing completed for all tenants", log_type="general", user_id=user_id)
 
-    self.update_state(state='SUCCESS', meta={'current': total_files, 'total': total_files})
 
-    task_status.status = 'completed'
-    task_status.result = "Task completed successfully."
-    db.session.commit()
+    task_status = TaskStatus.query.filter_by(task_id=self.request.id).first()
+
+    if task_status:
+        task_status.status = 'completed'
+        task_status.result = "Task completed successfully."
+        db.session.commit()
+
+
+    self.update_state(state='SUCCESS', meta={'current': total_files, 'total': total_files})
 
     return {'current': total_files, 'total': total_files, 'status': 'Task completed!'}
 
