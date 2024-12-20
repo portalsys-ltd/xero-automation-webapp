@@ -773,7 +773,7 @@ def aggregate_auto_workflows_data(user):
                 tenant_file_data["sales_invoices_tenants"].append({"name": connection.tenant_name, "file_count": sales_invoice_count})
 
                 # Count Inventory Files (matching "InventoryRecord" in the filename)
-                inventory_count = len([file for file in filtered_files if "Inventory" in file.name])
+                inventory_count = len([file for file in filtered_files if "Stock" in file.name])
                 inventory_journals_count += inventory_count
                 tenant_file_data["inventory_tenants"].append({"name": connection.tenant_name, "file_count": inventory_count})
 
