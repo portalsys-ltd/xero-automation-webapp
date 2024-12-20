@@ -51,7 +51,8 @@ from app.xero import (
     rename_file,
     update_invoice_records,
     process_inventory_file,
-    create_inventory_journals_in_xero
+    create_inventory_journals_in_xero,
+    refresh_xero_token
 
 )
 
@@ -3392,6 +3393,22 @@ def update_invoice_record_task(self, user_id):
         status = update_invoice_records(user)
 
         print(status)
+    
+    except Exception as e:
+        self.update_state(state='FAILURE', meta={'exc': str(e)})
+        raise e
+    
+import json
+
+@shared_task(bind=True)
+def refresh_xero_token_test(self, user_id):
+    try:
+        # Step 1: Retrieve user-specific Xero credentials
+        user = User.query.get(user_id)
+        token = json.loads(user.xero_token)
+        refresh_token = token.get('refresh_token')
+
+        refresh_xero_token(refresh_token, user)
     
     except Exception as e:
         self.update_state(state='FAILURE', meta={'exc': str(e)})

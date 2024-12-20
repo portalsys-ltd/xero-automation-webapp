@@ -8,6 +8,7 @@ from flask_login import current_user
 from app.models import *
 from app.routes.auth import user_login_required
 from app.xero import *
+from app.celery_tasks import refresh_xero_token_test
 
 
 main_bp = Blueprint('main', __name__)
@@ -86,6 +87,16 @@ def settings():
 
     return render_template('settings.html', business_account_codes=business_account_codes, allowed_tax_types=ALLOWED_TAX_TYPES, allowed_account_types=ALLOWED_ACCOUNT_TYPES, tracking_codes=tracking_codes, group_tracking_codes=group_tracking_codes, dom_tenants=dom_tenants,connected_tenants=connected_tenants, nominal_codes=nominal_codes, store_account_codes=store_account_codes)
 
+@main_bp.route("/refresh_token", methods=["POST"])
+@user_login_required
+def refresh_token():
+    try:
+        # Trigger the Celery task
+        task = refresh_xero_token_test.delay(current_user.id)
+
+        return jsonify({"success": True, "message": "Token refresh task started."}), 202
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
 
 
 

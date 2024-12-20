@@ -113,6 +113,7 @@ def get_xero_client_for_user(user):
                 if refresh_token:
                     new_token = refresh_xero_token(refresh_token, user)
                     if new_token:
+                        print(new_token)
                         return new_token
                     else:
                         # Refresh failed, force re-authentication
@@ -134,15 +135,16 @@ def get_xero_client_for_user(user):
     return api_client, xero_app
 
 def refresh_xero_token(refresh_token, user):
+    
     client_id = os.getenv("CLIENT_ID")
     client_secret = os.getenv("CLIENT_SECRET")
 
     # Check if token is still valid
     current_time = time.time()
     
-    if user.token_expires_at and user.token_expires_at > current_time + 300:
-        print(f"Token is still valid for user {user.id}, skipping refresh.")
-        return user.xero_access_token  # Return the existing token
+    #if user.token_expires_at and user.token_expires_at > current_time + 300:
+       # print(f"Token is still valid for user {user.id}, skipping refresh.")
+        #return user.xero_token  # Return the existing token
 
     # Handle the case where xero_token_expires_at is not set
     if not user.token_expires_at:
@@ -195,7 +197,7 @@ def save_user_xero_token(user, token):
         user.token_expires_at = None  # Handle cases where expires_at is missing
 
     db.session.commit()
-    add_log(f"Xero token and expiry data saved for user {user.username}.", "general")
+    add_log(f"Xero token and expiry data saved for user {user.username}.", "general", user_id=user.id)
 
 # Login route to initiate Xero OAuth
 @xero_bp.route("/login")
@@ -772,7 +774,7 @@ def aggregate_auto_workflows_data(user):
                 sales_invoices_count += sales_invoice_count
                 tenant_file_data["sales_invoices_tenants"].append({"name": connection.tenant_name, "file_count": sales_invoice_count})
 
-                # Count Inventory Files (matching "InventoryRecord" in the filename)
+                # Count Inventory Files (matching "Stock" in the filename)
                 inventory_count = len([file for file in filtered_files if "Stock" in file.name])
                 inventory_journals_count += inventory_count
                 tenant_file_data["inventory_tenants"].append({"name": connection.tenant_name, "file_count": inventory_count})
@@ -2935,6 +2937,14 @@ def process_inventory_file(user, file, processed_folder_id, rejected_folder_id, 
         month = date_value.month
         year = date_value.year
 
+        # Calculate the previous month and year
+        if month == 1:
+            prev_month = 12
+            prev_year = year - 1
+        else:
+            prev_month = month - 1
+            prev_year = year
+
         # Extract the store data, skipping irrelevant rows
         df = pd.read_excel(file_content, skiprows=3, header=0, names=["Store Name", "Amount"])
 
@@ -2964,6 +2974,28 @@ def process_inventory_file(user, file, processed_folder_id, rejected_folder_id, 
                 tenant_id=tenant_id
             )
             return {"error": error_message}
+        
+        # Check for missing records in the previous month
+        for _, row in df.iterrows():
+            store_name = row['Store Name']
+            prev_record = InventoryRecord.query.filter_by(
+                user_id=user.id,
+                month=prev_month,
+                year=prev_year,
+                store_name=store_name
+            ).first()
+
+            if not prev_record:
+                # Add a record for the previous month with amount=0 and processed=True
+                missing_record = InventoryRecord(
+                    user_id=user.id,
+                    month=prev_month,
+                    year=prev_year,
+                    store_name=store_name,
+                    amount=0,
+                    processed=True
+                )
+                db.session.add(missing_record)
 
         # Add new records to the database
         new_records = [

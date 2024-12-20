@@ -64,6 +64,17 @@
     </div>
 </div>
 
+<div>
+    <button
+        id="refreshTokenBtn"
+        style="padding: 10px 20px; background-color: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer;"
+    >
+        Refresh Token Manually
+    </button>
+    <span id="refreshStatus" style="margin-left: 15px; color: gray;"></span>
+</div>
+
+
 <script>
 function openModal(modalId) {
     document.getElementById(modalId).style.display = 'block';
@@ -72,5 +83,25 @@ function openModal(modalId) {
 function closeModal(modalId) {
     document.getElementById(modalId).style.display = 'none';
 }
+
+document.getElementById("refreshTokenBtn").addEventListener("click", function () {
+    const statusElement = document.getElementById("refreshStatus");
+    statusElement.textContent = "Refreshing...";
+
+    fetch("{{ url_for('main.refresh_token') }}", { method: "POST" })
+        .then((response) => response.json())
+        .then((data) => {
+            if (data.success) {
+                statusElement.textContent = "Token refreshed successfully.";
+            } else {
+                statusElement.textContent = "Failed to refresh token.";
+            }
+        })
+        .catch((error) => {
+            console.error("Error refreshing token:", error);
+            statusElement.textContent = "Error refreshing token.";
+        });
+});
+
 </script>
 {% endblock %}

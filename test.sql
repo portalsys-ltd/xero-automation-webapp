@@ -22,3 +22,6 @@ SET processed = TRUE
 WHERE user_id = 1
   AND month = 12;
 
+
+
+
